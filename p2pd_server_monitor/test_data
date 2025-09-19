@@ -1,0 +1,57 @@
+    [
+        [
+            ["stun1.p2pd.net"],
+            STUN_MAP_TYPE, V6, SOCK_DGRAM, "2607:5300:60:80b0::1", 3478
+        ]
+    ],
+    [
+        [
+            ["stun1.p2pd.net"],
+            STUN_MAP_TYPE, V4, SOCK_STREAM, "158.69.27.176", 3478
+        ]
+    ],
+    [
+        [
+            ["stun1.p2pd.net"],
+            STUN_MAP_TYPE, V6, SOCK_STREAM, "2607:5300:60:80b0::1", 3478
+        ]
+    ],
+    [
+        [
+            ["stun.gmx.de"],
+            STUN_CHANGE_TYPE, V4, SOCK_DGRAM, "212.227.67.33", 3478
+        ],
+        [
+            ["stun.gmx.de"],
+            STUN_CHANGE_TYPE, V4, SOCK_DGRAM, "212.227.67.34", 3479
+        ],
+    ],
+    """
+
+
+    [
+        [
+            ["stun.gmx.de"],
+            STUN_MAP_TYPE, V4, SOCK_DGRAM, "212.227.67.34", 3478
+        ]
+    ],
+
+
+
+
+
+    [
+        [
+            ["stun.hot-chilli.net", "alias2.lan"],
+            STUN_MAP_TYPE, V4, SOCK_DGRAM, "49.12.125.53", 3478
+        ],
+    ],
+
+    [[], STUN_MAP_TYPE, V4, "49.12.125.53", 3478, None, None],
+
+    [[], NTP_TYPE, V4, "216.239.35.4", 123, None, None],
+
+
+IMPORTS_TEST_DATA = [
+    [[], TURN_TYPE, V4, "103.253.147.231", 3478, "quickblox", "baccb97ba2d92d71e26eb9886da5f1e0"],
+]
