@@ -1,5 +1,6 @@
 
 import sys
 
-#from .dealer_server import *
-#from .worker_process import *
+if not '-m' in sys.argv:
+    from .dealer_server import *
+    from .worker_process import *

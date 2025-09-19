@@ -193,7 +193,7 @@ async def insert_services(imports_list, status_id):
 
 if __name__ == "__main__":
     uvicorn.run(
-        "p2pd-server-monitor.dealer_server:app",
+        "p2pd_server_monitor.dealer_server:app",
         host="127.0.0.1",
         port=8000,
         reload=False

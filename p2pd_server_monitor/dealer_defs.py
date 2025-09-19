@@ -1,7 +1,7 @@
 from p2pd import UDP, TCP, V4, V6
 
 # Placeholder -- fix this.
-DB_NAME = "/home/debian/monitor/p2pd-server-monitor/p2pd_server_monitor/monitor.sqlite3"
+DB_NAME = "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/monitor.sqlite3"
 WORKER_TIMEOUT = 120
 MONITOR_FREQUENCY = 10
 MAX_SERVER_DOWNTIME = 600
@@ -52,14 +52,5 @@ SERVICES_TEST_DATA = [
 ]
 
 IMPORTS_TEST_DATA = [
-    [
-        [
-            None,
-            STUN_CHANGE_TYPE, V4, UDP, "212.227.67.33", 3478, None, None
-        ],
-        [
-            None,
-            STUN_CHANGE_TYPE, V4, UDP, "212.227.67.34", 3479, None, None
-        ],
-    ],
+    [None, STUN_MAP_TYPE, V4, "49.12.125.53", 3478, None, None],
 ]

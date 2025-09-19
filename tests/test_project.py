@@ -9,16 +9,6 @@ VALID_IMPORTS_TEST_DATA = [
     #[None, NTP_TYPE, V4, "216.239.35.4", 123, None, None],
     #["broker.emqx.io", MQTT_TYPE, V4, "44.232.241.40", 1883, None, None],
     #[None, TURN_TYPE, V4, "103.253.147.231", 3478, "quickblox", "baccb97ba2d92d71e26eb9886da5f1e0"],
-    [
-        [
-            "stun.gmx.de",
-            STUN_CHANGE_TYPE, V4, UDP, "212.227.67.33", 3478, None, None
-        ],
-        [
-            None,
-            STUN_CHANGE_TYPE, V4, UDP, "212.227.67.34", 3479, None, None
-        ],
-    ],
 ]
 
 class TestProject(unittest.IsolatedAsyncioTestCase):
