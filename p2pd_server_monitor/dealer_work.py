@@ -114,8 +114,8 @@ async def mark_complete(db, is_success, status_id, t):
                 ELSE last_uptime 
             END,
 
-            
 
+            test_no = test_no + 1,
             status = ?,
             last_status = ?,
             last_success = ?
@@ -138,7 +138,8 @@ async def mark_complete(db, is_success, status_id, t):
         SET
             status = ?,
             last_status = ?,
-            failed_tests = failed_tests + 1
+            failed_tests = failed_tests + 1,
+            test_no = test_no + 1
         WHERE id = ?;
         """
         await db.execute(sql, (STATUS_AVAILABLE, t, status_id))

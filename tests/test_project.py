@@ -129,19 +129,42 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         sql = "SELECT * FROM status WHERE id = ?"
         async with self.db.execute(sql, (work["status_id"],)) as cursor:
             row = dict((await cursor.fetchall())[0])
-            print(row)
+            assert(row["uptime"])
+            assert(row["uptime"] == row["max_uptime"])
+            assert(row["test_no"] == 1)
 
 
     async def test_failed_work_should_reset_uptime(self):
-        pass
+        await insert_services_test_data(self.db)
+        work = (await get_work())[0]
+
+        # First -- set uptime and max_uptime to a positive value.
+        indicate_success = {
+            "is_success": 1,
+            "status_id": work["status_id"],
+            "t": int(time.time()) + 2
+        }
+
+        await signal_complete_work(str([indicate_success]))
+
+        # Then -- indicate a failed test.
+        indicate_failure = {
+            "is_success": 0,
+            "status_id": work["status_id"],
+            "t": int(time.time()) + 4
+        }
+
+        await signal_complete_work(str([indicate_failure]))
+
+
+        sql = "SELECT * FROM status WHERE id = ?"
+        async with self.db.execute(sql, (work["status_id"],)) as cursor:
+            row = dict((await cursor.fetchall())[0])
+            assert(not row["uptime"])
+            assert(row["max_uptime"])
+            assert(row["test_no"] == 2)
 
     async def test_valid_import_should_lead_to_insert(self):
-        pass
-
-    async def test_max_uptime_should_be_increase_on_uptime_change(self):
-        pass
-
-    async def test_no_should_be_increased_on_complete_change(self):
         pass
 
     async def test_status_should_be_created_on_insert_api(self):
