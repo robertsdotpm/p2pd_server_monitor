@@ -60,7 +60,7 @@ async def fetch_or_insert_alias(db, af, fqn):
     async with db.execute(sql, (af, fqn,)) as cursor:
         rows = await cursor.fetchone()
         if rows:
-            return rows[0]["id"]
+            return dict(rows)["id"]
 
     return await record_alias(db, af, fqn)
 

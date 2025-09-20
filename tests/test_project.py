@@ -85,7 +85,23 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
                 assert(work["status_id"] != more_work["status_id"])
 
     async def test_alias_update_should_update_existing_ips(self):
-        pass
+        fqn = "x.com"
+        dns_a = "9.9.9.9"
+        fqn_test_data = VALID_IMPORTS_TEST_DATA[:]
+        fqn_test_data = [[fqn] + td[1:] for td in fqn_test_data]
+        await insert_imports_test_data(self.db, fqn_test_data)
+        alias_id = await fetch_or_insert_alias(self.db, int(IP4), fqn)
+
+        await update_alias(alias_id, dns_a)
+
+        for table_name in ("imports", "aliases", "services"):
+            sql = f"SELECT * FROM {table_name}"
+            async with self.db.execute(sql) as cursor:
+                rows = await cursor.fetchall()
+                rows = [dict(row) for row in rows]
+                for row in rows:
+                    assert(row["ip"] == dns_a)
+        
 
     async def test_insert_should_create_new_service(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)

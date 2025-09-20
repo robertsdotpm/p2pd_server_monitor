@@ -60,11 +60,9 @@ async def insert_imports_test_data(db, test_data=IMPORTS_TEST_DATA):
                     if fqn:
                         # Update IP field.
                         res = await async_res_domain_af(info[1], fqn)
-                        print("resolved fqn for imports")
                         info[2] = res[1]
 
                         alias_id = await fetch_or_insert_alias(db, info[1], fqn)
-                        print("alias id = ", alias_id)
                         info[-1] = alias_id
                 except:
                     what_exception()
