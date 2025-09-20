@@ -91,6 +91,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         fqn_test_data = [[fqn] + td[1:] for td in fqn_test_data]
         await insert_imports_test_data(self.db, fqn_test_data)
         alias_id = await fetch_or_insert_alias(self.db, int(IP4), fqn)
+        await self.db.commit()
 
         await update_alias(alias_id, dns_a)
 
@@ -167,13 +168,10 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_new_alias_should_be_allocatable_as_work(self):
-        pass
-
-    async def test_new_import_should_be_allocatable_as_work(self):
-        pass
-
-    async def test_new_service_should_be_allocatable_as_work(self):
-        pass
+        alias_id = await fetch_or_insert_alias(self.db, int(IP4), "x.com")
+        await self.db.commit()
+        work = await get_work()
+        assert(len(work))
 
     async def test_allocated_work_should_be_marked_allocated(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
