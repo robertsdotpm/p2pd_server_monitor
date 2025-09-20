@@ -18,6 +18,15 @@ async def insert_services_test_data(db):
     group_id = 0
     for groups in SERVICES_TEST_DATA:
         async with db.execute("BEGIN"):
+            # Store alias(es)
+            alias_id = None
+            try:
+                for fqn in group[0]:
+                    alias_id = await fetch_or_insert_alias(db, group[2], fqn)
+                    break
+            except:
+                pass
+
             for group in groups:
                 insert_id = await insert_service(
                     db=db,
@@ -29,13 +38,8 @@ async def insert_services_test_data(db):
                     user=None,
                     password=None,
                     group_id=group_id,
-                    alias_id=None
+                    alias_id=alias_id
                 )
-                assert(insert_id is not None)
-
-                # Store alias(es)
-                for fqn in group[0]:
-                    alias_id = await record_alias(db, group[2], fqn)
 
             await db.commit()
 
@@ -65,10 +69,6 @@ async def insert_imports_test_data(db, test_data=IMPORTS_TEST_DATA):
                 except:
                     what_exception()
 
-                # Insert imports record and its status record.
-                print("try imports ", info)
-                print(sql)
-
                 async with await db.execute(sql, info) as cursor:
                     await init_status_row(
                         db,
@@ -76,7 +76,6 @@ async def insert_imports_test_data(db, test_data=IMPORTS_TEST_DATA):
                         IMPORTS_TABLE_TYPE
                     )
 
-                print(cursor.lastrowid)
                 await db.commit()
         except:
             what_exception()

@@ -33,8 +33,6 @@ async def fetch_group_records(db, status_entry, need_af):
     WHERE {where_clause};
     """
 
-    print(sql)
-
     async with db.execute(sql, params) as cursor:
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
@@ -97,6 +95,7 @@ async def mark_complete(db, is_success, status_id, t):
 
     # Update fields if a server test was successful.
     if is_success:
+        print("in is success")
         sql = """
         UPDATE status
         SET
@@ -114,6 +113,8 @@ async def mark_complete(db, is_success, status_id, t):
                 THEN ? 
                 ELSE last_uptime 
             END,
+
+            
 
             status = ?,
             last_status = ?,

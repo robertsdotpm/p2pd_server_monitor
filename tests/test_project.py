@@ -74,13 +74,14 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
     # TODO: check alias status and service status deleted.
 
-    """
     async def test_import_work_should_be_handed_out_once(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
-        out = await get_work()
-        print(out)
-    """
-
+        work = (await get_work())[0]
+        for i in range(0, len(VALID_IMPORTS_TEST_DATA)):
+            more_work = (await get_work())
+            if more_work:
+                more_work = more_work[0]
+                assert(work["status_id"] != more_work["status_id"])
 
     async def test_worker_loop_exception_should_continue(self):
         pass
@@ -107,10 +108,29 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         pass
 
     async def test_allocated_work_should_be_marked_allocated(self):
-        pass
+        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
+        work = (await get_work())[0]
+        sql = "SELECT * FROM status WHERE id = ?"
+        async with self.db.execute(sql, (work["status_id"],)) as cursor:
+            row = dict((await cursor.fetchall())[0])
+            assert(row["status"] == STATUS_DEALT)
+
 
     async def test_success_work_should_increase_uptime(self):
-        pass
+        await insert_services_test_data(self.db)
+        work = (await get_work())[0]
+        work = {
+            "is_success": 1,
+            "status_id": work["status_id"],
+            "t": int(time.time()) + 2
+        }
+
+        await signal_complete_work(str([work]))
+        sql = "SELECT * FROM status WHERE id = ?"
+        async with self.db.execute(sql, (work["status_id"],)) as cursor:
+            row = dict((await cursor.fetchall())[0])
+            print(row)
+
 
     async def test_failed_work_should_reset_uptime(self):
         pass

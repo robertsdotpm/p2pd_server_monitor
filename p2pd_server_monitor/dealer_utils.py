@@ -28,9 +28,12 @@ async def init_status_row(db, row_id, table_type):
     sql  = "INSERT INTO status (%s) VALUES " % (", ".join(STATUS_SCHEMA)) 
     sql += "(?, ?, ?, ?, ?, ?, ?, ?)"
     t    = int(time.time())
+
+    print(sql)
+    
     async with await db.execute(
         sql,
-        (row_id, table_type, STATUS_INIT, t, 0, 0, 0, t)
+        (row_id, table_type, STATUS_INIT, t, 0, 0, 0, t,)
     ) as cursor:
         return cursor.lastrowid
     

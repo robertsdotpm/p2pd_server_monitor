@@ -156,7 +156,7 @@ BEGIN
     END;
 END;
 CREATE TRIGGER increment_test_no
-AFTER UPDATE OF last_success, failed_tests ON status
+AFTER UPDATE OF uptime ON status
 FOR EACH ROW
 BEGIN
     UPDATE status
@@ -164,11 +164,9 @@ BEGIN
     WHERE id = NEW.id;
 END;
 CREATE TRIGGER reset_uptime_on_failure
-AFTER UPDATE OF last_status ON status
+AFTER UPDATE OF failed_tests ON status
 FOR EACH ROW
-WHEN (NEW.last_status - NEW.last_success) >= (
-        SELECT value FROM settings WHERE key = 'max_server_downtime'
-)
+WHEN NEW.failed_tests > OLD.failed_tests
 BEGIN
     UPDATE status
     SET uptime = 0,

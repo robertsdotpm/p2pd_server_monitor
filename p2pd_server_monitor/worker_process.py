@@ -40,7 +40,7 @@ async def worker_loop():
             await update_work_status(curl, status_ids, is_success)
             #await curl.vars().get("/freshdb")
         except:
-            what_exception()
+            log_exception()
 
 if __name__ == "__main__":
     asyncio.run(worker_loop1())
