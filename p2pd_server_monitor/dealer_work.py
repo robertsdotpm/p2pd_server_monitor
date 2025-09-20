@@ -14,16 +14,16 @@ async def fetch_group_records(db, status_entry, need_af):
         group_id = (
             SELECT group_id
             FROM services
-            WHERE services.id=? AND af=?
+            WHERE services.id=? AND af LIKE ?
             LIMIT 1
-        ) AND af=?
+        ) AND af LIKE ?
         """
         params = (row_id, need_af, need_af)
     else:
         table_name = (
             "aliases" if table_type == ALIASES_TABLE_TYPE else "imports"
         )
-        where_clause = f"{table_name}.id=? AND af=?"
+        where_clause = f"{table_name}.id=? AND af LIKE ?"
         params = (row_id, need_af)
 
     sql = f"""
@@ -32,6 +32,8 @@ async def fetch_group_records(db, status_entry, need_af):
     LEFT JOIN status AS s ON s.row_id = {table_name}.id
     WHERE {where_clause};
     """
+
+    print(sql)
 
     async with db.execute(sql, params) as cursor:
         rows = await cursor.fetchall()

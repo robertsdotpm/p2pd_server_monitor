@@ -41,10 +41,10 @@ async def insert_services_test_data(db):
 
         group_id += 1
 
-async def insert_imports_test_data(db):
+async def insert_imports_test_data(db, test_data=IMPORTS_TEST_DATA):
     sql  = "INSERT INTO imports (type, af, ip, port, user, pass, alias_id) "
     sql += "VALUES (?, ?, ?, ?, ?, ?, ?)"
-    for info in IMPORTS_TEST_DATA:
+    for info in test_data:
         fqn = info[0]
         info = info[1:]
         info[2] = ensure_ip_is_public(info[2])

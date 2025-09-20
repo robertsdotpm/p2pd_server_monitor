@@ -24,6 +24,11 @@ future:
     -- some dns servers return different ips each time. do you want ips to change
     for servers? a dns might represent a cluster. maybe still works depending
     on the protocol.
+
+edge case:
+    For STUN change servers if you use an alias you need different aliases for both
+    primary and change IPs OR no aliases. a single alias means that the pair will
+    break on DNS IP updates.
 """
 
 import uvicorn
@@ -57,9 +62,11 @@ async def main():
 async def get_work(stack_type: int = DUEL_STACK):
     # Indicate IPv4 / 6 support of worker process.
     if stack_type == DUEL_STACK:
-        need_af = "af"
+        need_af = "%"
     else:
-        need_af = stack_type if stack_type in VALID_AFS else "af"
+        need_af = stack_type if stack_type in VALID_AFS else "%"
+
+    print("in get work")
 
     # Connect to DB and find some work.
     async with aiosqlite.connect(DB_NAME) as db:
