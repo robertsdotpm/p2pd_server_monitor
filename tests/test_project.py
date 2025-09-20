@@ -320,10 +320,36 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         assert(is_success)
 
     async def test_alias_monitor(self):
-        pass
+        route = self.nic.route(IP4)
+        curl = WebCurl(("23.220.75.245", 80,), route)
+        alias = [{
+            "fqn": "www.example.com",
+            "af": IP4,
+            "row_id": 0,
+            "status_id": 0,
+        }]
+
+        is_success, status_ids = await alias_monitor(curl, alias)
+        assert(is_success)
 
     async def test_imports_monitor(self):
-        pass
+        route = self.nic.route(IP4)
+        curl = WebCurl(("23.220.75.245", 80,), route)
+        servers = []
+        for info in VALID_IMPORTS_TEST_DATA:
+            server = {
+                "type": info[1],
+                "af": info[2],
+                "ip": info[3],
+                "port": info[4],
+                "user": info[5],
+                "pass": info[6],
+                "alias_id": 0,
+                "status_id": 0,
+            }
+
+            await imports_monitor(curl, [server])
+
 
     async def test_worker_loop_exception_should_continue(self):
         pass
@@ -332,3 +358,11 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
     async def test_multiple_valid_imports_should_be_reflected_in_servers_list(self):
         pass
 
+    async def test_work_allocatable_before_threshold(self):
+        pass
+
+    async def test_work_reallocated_after_worker_timeout(self):
+        pass
+
+    async def test_work_not_allocated_before_second_threshold(self):
+        pass
