@@ -49,11 +49,11 @@ SERVICES_TEST_DATA = [
             STUN_CHANGE_TYPE, V4, UDP, "49.12.125.24", 3479
         ],
     ],
-    """
+    
     [
-        [[], NTP_TYPE, V4, "216.239.35.4", 123],
+        [[], NTP_TYPE, V4, UDP, "216.239.35.4", 123],
     ]
-    """
+    
 ]
 
 IMPORTS_TEST_DATA = [

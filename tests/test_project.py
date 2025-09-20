@@ -192,12 +192,16 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         }
 
         await signal_complete_work(str([work]))
+
+        work["t"] += 2
+        await signal_complete_work(str([work]))
+
         sql = "SELECT * FROM status WHERE id = ?"
         async with self.db.execute(sql, (work["status_id"],)) as cursor:
             row = dict((await cursor.fetchall())[0])
             assert(row["uptime"])
             assert(row["uptime"] == row["max_uptime"])
-            assert(row["test_no"] == 1)
+            assert(row["test_no"] == 2)
 
 
     async def test_failed_work_should_reset_uptime(self):
@@ -211,6 +215,8 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "t": int(time.time()) + 2
         }
 
+        await signal_complete_work(str([indicate_success]))
+        indicate_success["t"] += 2
         await signal_complete_work(str([indicate_success]))
 
         # Then -- indicate a failed test.
@@ -228,7 +234,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             row = dict((await cursor.fetchall())[0])
             assert(not row["uptime"])
             assert(row["max_uptime"])
-            assert(row["test_no"] == 2)
+            assert(row["test_no"] == 3)
 
     async def test_valid_import_should_lead_to_insert(self):
         pass

@@ -14,7 +14,7 @@ async def init_settings_table(db):
     await db.execute(sql, params)
     await db.commit()
 
-async def insert_services_test_data(db):
+async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
     group_id = 0
     for groups in SERVICES_TEST_DATA:
         async with db.execute("BEGIN"):
@@ -28,6 +28,7 @@ async def insert_services_test_data(db):
                 pass
 
             for group in groups:
+                print(group)
                 insert_id = await insert_service(
                     db=db,
                     service_type=group[1],

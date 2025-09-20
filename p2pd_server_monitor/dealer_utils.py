@@ -31,7 +31,7 @@ async def init_status_row(db, row_id, table_type):
 
     async with await db.execute(
         sql,
-        (row_id, table_type, STATUS_INIT, t, 0, 0, 0, t,)
+        (row_id, table_type, STATUS_INIT, t, 0, 0, 0, 0,)
     ) as cursor:
         return cursor.lastrowid
     
