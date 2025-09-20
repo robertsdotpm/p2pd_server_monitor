@@ -169,6 +169,8 @@ async def update_alias(alias_id: int, ip: str):
 async def insert_services(imports_list, status_id):
     # Convert dict string back to Python.
     imports_list = ast.literal_eval(imports_list)
+    print("imports list = ", type(imports_list), " ", imports_list)
+    print("imports list [0] = ", type(imports_list[0]))
 
     # DB connection for sqlite.
     async with aiosqlite.connect(DB_NAME) as db:
@@ -177,6 +179,8 @@ async def insert_services(imports_list, status_id):
         # Single atomic transaction for all inserts, dels, etc.
         async with db.execute("BEGIN"):
             for services in imports_list:
+                print("services = ", type(services), services)
+
                 # All inserts use the same group ID.
                 group_id = await get_max_group_id(db) + 1
 

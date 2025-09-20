@@ -83,14 +83,34 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
                 more_work = more_work[0]
                 assert(work["status_id"] != more_work["status_id"])
 
-    async def test_worker_loop_exception_should_continue(self):
-        pass
-
     async def test_alias_update_should_update_existing_ips(self):
         pass
 
     async def test_insert_should_create_new_service(self):
-        pass
+        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
+        work = dict((await get_work())[0])
+        status_id = work["status_id"]
+        service = {
+            "service_type": work["type"],
+            "af": work["af"],
+            "proto": int(UDP),
+            "ip": work["ip"],
+            "port": work["port"],
+            "user": work["user"],
+            "password": work["pass"],
+            "alias_id": work["alias_id"]
+        }
+
+        sql = "SELECT * FROM services"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            assert(not len(rows))
+
+        await insert_services(str([[service]]), status_id)
+
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            assert(len(rows))
 
     async def test_insert_list_should_share_group_id(self):
         pass
@@ -199,6 +219,10 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
     async def test_imports_monitor(self):
         pass
+
+    async def test_worker_loop_exception_should_continue(self):
+        pass
+
 
     async def test_multiple_valid_imports_should_be_reflected_in_servers_list(self):
         pass
