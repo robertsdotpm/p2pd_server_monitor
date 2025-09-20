@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 import aiosqlite
+import copy
 from p2pd import *
 from p2pd_server_monitor import *
 
@@ -112,11 +113,42 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             rows = await cursor.fetchall()
             assert(len(rows))
 
-    async def test_insert_list_should_share_group_id(self):
-        pass
+    async def test_import_list_group_id_assumptions(self):
+        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
+        work = dict((await get_work())[0])
+        status_id = work["status_id"]
 
-    async def test_insert_should_increase_group_id(self):
-        pass
+        primary = {
+            "service_type": STUN_CHANGE_TYPE,
+            "af": int(IP4),
+            "proto": int(UDP),
+            "ip": "8.8.8.8",
+            "port": 8000,
+            "user": None,
+            "password": None,
+            "alias_id": None
+        }
+
+        secondary = copy.deepcopy(primary)
+        secondary["ip"] = "8.8.4.4"
+
+        another = copy.deepcopy(secondary)
+        another["ip"] = "4.4.4.4"
+
+        imports_list = [
+            [primary, secondary],
+            [another]
+        ]
+
+        await insert_services(str(imports_list), status_id)
+
+        sql = "SELECT * FROM services"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            rows = [dict(row) for row in rows]
+            assert(rows[0]["group_id"] == rows[1]["group_id"])
+            assert(rows[0]["group_id"] != rows[2]["group_id"])
+
 
     async def test_new_alias_should_be_allocatable_as_work(self):
         pass
