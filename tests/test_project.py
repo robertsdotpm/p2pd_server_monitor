@@ -252,19 +252,72 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         pass
 
     async def test_monitor_stun_map_type(self):
-        pass
+        work = [{
+            "af": IP4,
+            "ip": "74.125.250.129", # Google
+            "port": 19302,
+            "proto": UDP,
+            "status_id": None,
+        }]
+
+
+        is_success, status_ids = await monitor_stun_map_type(self.nic, work)
+        assert(is_success)
 
     async def test_monitor_stun_change_type(self):
-        pass
+        servers = [
+            {"ip": "49.12.125.53", "port": 3478},
+            {"ip": "49.12.125.53", "port": 3479},
+            {"ip": "49.12.125.24", "port": 3478},
+            {"ip": "49.12.125.24", "port": 3479},
+        ]
+
+        servers[0]["af"] = IP4
+        servers[0]["proto"] = UDP
+        for server in servers:
+            server["status_id"] = None
+
+        is_success, status_ids = await monitor_stun_change_type(self.nic, servers)
+        assert(is_success)
 
     async def test_monitor_mqtt_type(self):
-        pass
+        servers = [{
+            "af": IP4,
+            "proto": UDP,
+            "ip": "44.232.241.40",
+            "port": 1883,
+            "status_id": None
+        }]
+
+        is_success, status_ids = await monitor_mqtt_type(self.nic, servers)
+        assert(is_success)
+
 
     async def test_monitor_turn_type(self):
-        pass
+        servers = [{
+            "af": IP4,
+            "proto": UDP,
+            "ip": "103.253.147.231",
+            "port": 3478,
+            "status_id": None,
+            "user": "quickblox",
+            "pass": "baccb97ba2d92d71e26eb9886da5f1e0"
+        }]
+
+        is_success, status_ids = await monitor_turn_type(self.nic, servers)
+        assert(is_success)
 
     async def test_monitor_ntp_type(self):
-        pass
+        servers = [{
+            "af": IP4,
+            "proto": UDP,
+            "ip": "216.239.35.4",
+            "port": 123,
+            "status_id": None
+        }]
+
+        is_success, status_ids = await monitor_ntp_type(self.nic, servers)
+        assert(is_success)
 
     async def test_alias_monitor(self):
         pass
