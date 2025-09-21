@@ -33,11 +33,11 @@ IMPORTS_TABLE_TYPE = 3
 SERVICES_TEST_DATA = [
     [
         [
-            ["stun.hot-chilli.net"],
+            [],
             STUN_CHANGE_TYPE, V4, UDP, "49.12.125.53", 3478
         ],
         [
-            ["stun.hot-chilli.net"],
+            [],
             STUN_CHANGE_TYPE, V4, UDP, "49.12.125.53", 3479
         ],
         [

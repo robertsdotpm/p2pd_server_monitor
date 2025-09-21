@@ -166,12 +166,41 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             assert(rows[0]["group_id"] == rows[1]["group_id"])
             assert(rows[0]["group_id"] != rows[2]["group_id"])
 
-
     async def test_new_alias_should_be_allocatable_as_work(self):
         alias_id = await fetch_or_insert_alias(self.db, int(IP4), "x.com")
         await self.db.commit()
         work = await get_work()
         assert(len(work))
+
+    async def test_work_reallocated_after_worker_timeout(self):
+        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
+        for i in range(0, len(VALID_IMPORTS_TEST_DATA)):
+            work = (await get_work())[0]
+
+        work = await get_work()
+        assert(not len(work))
+
+        # Simulate fetch work after a long time.
+        work = await get_work(current_time=int(time.time()) + (WORKER_TIMEOUT * 2))
+        assert(len(work))        
+
+    async def test_work_not_allocated_before_second_threshold(self):
+        test_data = SERVICES_TEST_DATA[:]
+        for group in test_data:
+            await insert_services_test_data(self.db, test_data=[group])
+            work = (await get_work(monitor_frequency=10))
+            assert(len(work))
+            
+            work = {
+                "is_success": 1,
+                "status_id": work[0]["status_id"],
+                "t": int(time.time())
+            }
+
+            await signal_complete_work(str([work]))
+
+            work = await get_work(monitor_frequency=10)
+            assert(not len(work))
 
     async def test_allocated_work_should_be_marked_allocated(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
@@ -180,7 +209,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         async with self.db.execute(sql, (work["status_id"],)) as cursor:
             row = dict((await cursor.fetchall())[0])
             assert(row["status"] == STATUS_DEALT)
-
 
     async def test_success_work_should_increase_uptime(self):
         await insert_services_test_data(self.db)
@@ -359,10 +387,4 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         pass
 
     async def test_work_allocatable_before_threshold(self):
-        pass
-
-    async def test_work_reallocated_after_worker_timeout(self):
-        pass
-
-    async def test_work_not_allocated_before_second_threshold(self):
         pass

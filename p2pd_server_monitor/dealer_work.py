@@ -9,22 +9,25 @@ async def fetch_group_records(db, status_entry, need_af):
     row_id = status_entry["row_id"]
 
     if table_type == SERVICES_TABLE_TYPE:
+        group_id = None
+        async with db.execute(
+            "SELECT group_id FROM services WHERE id=? LIMIT 1", (row_id,)
+        ) as cursor:
+            ref = await cursor.fetchone()
+            if ref is None:
+                return []
+
+            group_id = dict(ref)["group_id"]
+
         table_name = "services"
-        where_clause = """
-        group_id = (
-            SELECT group_id
-            FROM services
-            WHERE services.id=? AND af LIKE ?
-            LIMIT 1
-        ) AND af LIKE ?
-        """
-        params = (row_id, need_af, need_af)
+        where_clause = "group_id=? AND af LIKE ?"
+        params = (group_id, need_af,)
     else:
         table_name = (
             "aliases" if table_type == ALIASES_TABLE_TYPE else "imports"
         )
         where_clause = f"{table_name}.id=? AND af LIKE ?"
-        params = (row_id, need_af)
+        params = (row_id, need_af,)
 
     sql = f"""
     SELECT {table_name}.*, s.id AS status_id, s.*
@@ -37,7 +40,7 @@ async def fetch_group_records(db, status_entry, need_af):
         rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
-def check_allocatable(group_records, current_time):
+def check_allocatable(group_records, current_time, monitor_frequency):
     """Return allocatable records if all in group are ready, else []."""
     allocatable_records = []
     for record in group_records:
@@ -46,13 +49,18 @@ def check_allocatable(group_records, current_time):
             continue
 
         elapsed = current_time - record["last_status"]
-        assert elapsed >= 0
+        if elapsed < 0:
+            continue
+
+        print("elapsed = ", elapsed)
+        print("monitor freq = ", monitor_frequency)
+        print("status = ", record["status"])
 
         if record["status"] == STATUS_DEALT:
             if elapsed >= WORKER_TIMEOUT:
                 record["status"] = STATUS_AVAILABLE
 
-        if elapsed < MONITOR_FREQUENCY:
+        if elapsed < monitor_frequency:
             record["status"] = STATUS_DEALT
 
         if record["status"] == STATUS_AVAILABLE:

@@ -15,8 +15,8 @@ async def init_settings_table(db):
     await db.commit()
 
 async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
-    group_id = 0
-    for groups in SERVICES_TEST_DATA:
+    group_id = await get_max_group_id(db) + 1
+    for groups in test_data:
         async with db.execute("BEGIN"):
             # Store alias(es)
             alias_id = None
@@ -28,7 +28,6 @@ async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
                 pass
 
             for group in groups:
-                print(group)
                 insert_id = await insert_service(
                     db=db,
                     service_type=group[1],

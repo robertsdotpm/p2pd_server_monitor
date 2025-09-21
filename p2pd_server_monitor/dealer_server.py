@@ -59,7 +59,7 @@ async def main():
 
 # Hands out work (servers to check) to worker processes.
 @app.get("/work")
-async def get_work(stack_type: int = DUEL_STACK):
+async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY):
     # Indicate IPv4 / 6 support of worker process.
     if stack_type == DUEL_STACK:
         need_af = "%"
@@ -77,12 +77,21 @@ async def get_work(stack_type: int = DUEL_STACK):
         async with db.execute(sql) as cursor:
             status_entries = [dict(r) for r in await cursor.fetchall()]
 
+        print("status entries = ", status_entries)
+
         # Get a group of service(s), aliases, or imports.
         # Check if its allocatable, mark it allocated, and return it.
-        current_time = int(time.time())
+        current_time = current_time or int(time.time())
         for status_entry in status_entries:
             group_records = await fetch_group_records(db, status_entry, need_af)
-            allocatable_records = check_allocatable(group_records, current_time)
+
+
+            allocatable_records = check_allocatable(
+                group_records,
+                current_time,
+                monitor_frequency
+            )
+
             if allocatable_records:
                 await mark_allocated(db, allocatable_records, current_time)
                 return allocatable_records
