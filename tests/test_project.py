@@ -30,7 +30,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         await delete_all_data(self.db)
         await init_settings_table(self.db)
         await self.db.commit()
-        print(self.nic)
 
     async def asyncTearDown(self):
         await self.db.close()
@@ -190,17 +189,36 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             await insert_services_test_data(self.db, test_data=[group])
             work = (await get_work(monitor_frequency=10))
             assert(len(work))
-            
-            work = {
-                "is_success": 1,
-                "status_id": work[0]["status_id"],
-                "t": int(time.time())
-            }
 
-            await signal_complete_work(str([work]))
+            work_list = work[:]
+            for serv in work_list:
+                signal = {
+                    "is_success": 1,
+                    "status_id": serv["status_id"],
+                    "t": int(time.time())
+                }
+
+                await signal_complete_work(str([signal]))
 
             work = await get_work(monitor_frequency=10)
             assert(not len(work))
+
+            for serv in work_list:
+                signal = {
+                    "is_success": 1,
+                    "status_id": serv["status_id"],
+                    "t": int(time.time())
+                }
+
+                await signal_complete_work(str([signal]))
+
+            work = await get_work(monitor_frequency=10)
+            assert(not len(work))
+
+            t = int(time.time()) + 15
+
+            work = await get_work(monitor_frequency=10, current_time=t)
+            assert(len(work))
 
     async def test_allocated_work_should_be_marked_allocated(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
@@ -263,12 +281,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             assert(not row["uptime"])
             assert(row["max_uptime"])
             assert(row["test_no"] == 3)
-
-    async def test_valid_import_should_lead_to_insert(self):
-        pass
-
-    async def test_status_should_be_created_on_insert_api(self):
-        pass
 
     async def test_status_should_be_created_on_new_alias_for_test_data(self):
         pass
@@ -380,11 +392,4 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_worker_loop_exception_should_continue(self):
-        pass
-
-
-    async def test_multiple_valid_imports_should_be_reflected_in_servers_list(self):
-        pass
-
-    async def test_work_allocatable_before_threshold(self):
         pass
