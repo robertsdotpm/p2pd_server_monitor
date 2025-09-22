@@ -78,9 +78,10 @@ async def claim_group(db, group_records, alloc_time):
     t = alloc_time or int(time.time())
 
     # First, check eligibility
+    placeholders = ("?, " * len(status_ids))[:-2]
     sql_check = f"""
     SELECT status, last_status FROM status
-    WHERE id IN ({','.join(['?']*len(status_ids))})
+    WHERE id IN ({placeholders})
     """
     async with db.execute(sql_check, status_ids) as cursor:
         rows = await cursor.fetchall()
@@ -94,7 +95,7 @@ async def claim_group(db, group_records, alloc_time):
         sql_update = f"""
         UPDATE status
         SET status=?, last_status=?
-        WHERE id IN ({','.join(['?']*len(status_ids))})
+        WHERE id IN ({placeholders})
         """
         params = [STATUS_DEALT, t] + status_ids
         result = await db.execute(sql_update, params)
