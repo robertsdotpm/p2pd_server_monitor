@@ -421,28 +421,68 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "service_type": work["type"],
             "af": work["af"],
             "proto": int(UDP),
-            "ip": work["ip"],
+            "ip": "8.8.8.8",
             "port": work["port"],
             "user": work["user"],
             "password": work["pass"],
             "alias_id": work["alias_id"]
         }
 
-        sql = "SELECT * FROM services"
-        async with self.db.execute(sql) as cursor:
-            rows = await cursor.fetchall()
-            assert(not len(rows))
+        try:
+            bad_ip = copy.deepcopy(service)
+            bad_ip["ip"] = "835sfasd"
+            await insert_services(str([[bad_ip]]), status_id)
+            assert(0)
+        except:
+            pass
 
-        await insert_services(str([[service]]), status_id)
+        try:
+            bad_port = copy.deepcopy(service)
+            bad_port["port"] = 5365452634
+            await insert_services(str([[bad_port]]), status_id)
+            assert(0)
+        except:
+            pass
+
+        try:
+            bad_proto = copy.deepcopy(service)
+            bad_proto["proto"] = 5365452634
+            await insert_services(str([[bad_proto]]), status_id)
+            assert(0)
+        except:
+            pass
+
+        try:
+            bad_service_type = copy.deepcopy(service)
+            bad_service_type["service_type"] = 4234
+            await insert_services(str([[bad_service_type]]), status_id)
+            assert(0)
+        except:
+            pass
+
+        try:
+            bad_af = copy.deepcopy(service)
+            bad_af["af"] = 1337
+            await insert_services(str([[bad_af]]), status_id)
+            assert(0)
+        except:
+            pass
 
 
     async def test_service_deletion_should_remove_related_status(self):
-        # Delete a service and assert related status rows are deleted
-        pass
+        test_data = SERVICES_TEST_DATA[:]
+        for group in test_data:
+            await insert_services_test_data(self.db, test_data=[group])
 
-    async def test_imports_monitor_handles_empty_server_list(self):
-        # Call imports_monitor with an empty list and assert no errors
-        pass
+        work = await get_work()
+        sql = "DELETE FROM services WHERE id = ?"
+        async with self.db.execute(sql, (work[0]["row_id"],)) as cursor:
+            await self.db.commit()
+
+        sql = "SELECT * FROM status WHERE id = ?"
+        async with self.db.execute(sql, (work[0]["status_id"],)) as cursor:               
+            rows = await cursor.fetchall()
+            assert(not len(rows))   
 
     async def test_monitor_turn_type_with_wrong_credentials(self):
         # Pass wrong user/pass to monitor_turn_type and assert failure

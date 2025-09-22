@@ -55,6 +55,15 @@ async def record_alias(db, af, fqn):
 
     return alias_id
 
+async def load_alias_row(db, alias_id):
+    sql = "SELECT * FROM aliases WHERE id=?"
+    async with db.execute(sql, (alias_id,)) as cursor:
+        rows = await cursor.fetchone()
+        if rows:
+            return rows
+
+    return None
+
 async def fetch_or_insert_alias(db, af, fqn):
     sql = "SELECT * FROM aliases WHERE af=? AND fqn=?"
     async with db.execute(sql, (af, fqn,)) as cursor:
@@ -85,6 +94,13 @@ async def insert_service(
 ):
     # Some servers like to point to local resources for trickery.
     ip = ensure_ip_is_public(ip)
+
+    # Load alias row to ensure it exists.
+    if alias_id:
+        alias_row = await load_alias_row(db, alias_id)
+        if not alias_row:
+            print("insert here")
+            raise Exception("Alias ID does not exist.")
 
     # SQL statement for insert into services.
     sql  = """
