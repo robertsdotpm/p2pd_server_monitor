@@ -29,6 +29,8 @@ edge case:
     For STUN change servers if you use an alias you need different aliases for both
     primary and change IPs OR no aliases. a single alias means that the pair will
     break on DNS IP updates.
+    - negative uptimes possible if time manually set in the past but this is
+    still useful for tests and these APIs wont be public
 """
 
 import uvicorn
@@ -84,8 +86,6 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
         current_time = current_time or int(time.time())
         for status_entry in status_entries:
             group_records = await fetch_group_records(db, status_entry, need_af)
-
-
             allocatable_records = check_allocatable(
                 group_records,
                 current_time,
@@ -187,11 +187,14 @@ async def insert_services(imports_list, status_id):
 
         # Single atomic transaction for all inserts, dels, etc.
         async with db.execute("BEGIN"):
+            group_id = 0
             for services in imports_list:
                 print("services = ", type(services), services)
 
                 # All inserts use the same group ID.
-                group_id = await get_max_group_id(db) + 1
+                new_group_id = await get_max_group_id(db) + 1
+                assert(new_group_id > group_id)
+                group_id = new_group_id
 
                 # All inserts happen in the same transaction.
                 for service in services:

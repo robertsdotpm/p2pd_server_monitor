@@ -15,9 +15,7 @@ VALID_IMPORTS_TEST_DATA = [
 class TestProject(unittest.IsolatedAsyncioTestCase):
     @classmethod
     async def init_interface(cls):
-        print("before interface")
         cls.nic = await Interface()
-        print("set up interface")
 
     @classmethod
     def setUpClass(cls):
@@ -33,9 +31,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         await self.db.close()
-
-    async def test_settings_table_set(self):
-        pass
 
     async def test_data_should_be_inserted(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
@@ -72,7 +67,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             rows = await cursor.fetchall()
             assert(not len(rows))
 
-    # TODO: check alias status and service status deleted.
+    # TODO: check alias status and service status deleted for triggers.
 
     async def test_import_work_should_be_handed_out_once(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
@@ -282,15 +277,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             assert(row["max_uptime"])
             assert(row["test_no"] == 3)
 
-    async def test_status_should_be_created_on_new_alias_for_test_data(self):
-        pass
-
-    async def test_status_should_be_created_on_new_service_for_test_data(self):
-        pass
-
-    async def test_import_continues_on_duplicate_alias(self):
-        pass
-
     async def test_monitor_stun_map_type(self):
         work = [{
             "af": IP4,
@@ -392,4 +378,37 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_worker_loop_exception_should_continue(self):
-        pass
+        is_success = await worker(self.nic, None)
+        assert(not is_success)
+
+    async def test_status_should_be_created_on_new_alias(self):
+        await fetch_or_insert_alias(self.db, IP4, "example.com")
+        sql = "SELECT * FROM status"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            assert(rows)
+
+    async def test_ipv6_works_at_all(self):
+        test_data = [
+            [
+                None,
+                MQTT_TYPE, V6, "2607:5300:60:80b0::1", 1883, None, None
+            ],
+        ]
+
+        route = self.nic.route(IP4)
+        curl = WebCurl(("8.8.8.8", 80,), route)
+        servers = []
+        for info in test_data:
+            server = {
+                "type": info[1],
+                "af": info[2],
+                "ip": info[3],
+                "port": info[4],
+                "user": info[5],
+                "pass": info[6],
+                "alias_id": 0,
+                "status_id": 0,
+            }
+
+            await imports_monitor(curl, [server])

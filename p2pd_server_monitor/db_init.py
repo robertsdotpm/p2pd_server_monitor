@@ -15,35 +15,42 @@ async def init_settings_table(db):
     await db.commit()
 
 async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
-    group_id = await get_max_group_id(db) + 1
+    group_id = 0
     for groups in test_data:
-        async with db.execute("BEGIN"):
-            # Store alias(es)
-            alias_id = None
-            try:
-                for fqn in group[0]:
-                    alias_id = await fetch_or_insert_alias(db, group[2], fqn)
-                    break
-            except:
-                pass
+        try:
+            async with db.execute("BEGIN"):
+                # Store alias(es)
+                alias_id = None
+                try:
+                    for fqn in group[0]:
+                        alias_id = await fetch_or_insert_alias(db, group[2], fqn)
+                        break
+                except:
+                    log_exception()
 
-            for group in groups:
-                insert_id = await insert_service(
-                    db=db,
-                    service_type=group[1],
-                    af=group[2],
-                    proto=group[3],
-                    ip=ip_norm(group[4]),
-                    port=group[5],
-                    user=None,
-                    password=None,
-                    group_id=group_id,
-                    alias_id=alias_id
-                )
+                # All items in a group share the same group ID.
+                new_group_id = await get_max_group_id(db) + 1
+                assert(new_group_id > group_id)
+                group_id = new_group_id
 
-            await db.commit()
+                for group in groups:
+                    insert_id = await insert_service(
+                        db=db,
+                        service_type=group[1],
+                        af=group[2],
+                        proto=group[3],
+                        ip=ip_norm(group[4]),
+                        port=group[5],
+                        user=None,
+                        password=None,
+                        group_id=group_id,
+                        alias_id=alias_id
+                    )
 
-        group_id += 1
+
+                await db.commit()
+        except:
+            log_exception()
 
 async def insert_imports_test_data(db, test_data=IMPORTS_TEST_DATA):
     sql  = "INSERT INTO imports (type, af, ip, port, user, pass, alias_id) "
@@ -65,7 +72,7 @@ async def insert_imports_test_data(db, test_data=IMPORTS_TEST_DATA):
                         alias_id = await fetch_or_insert_alias(db, info[1], fqn)
                         info[-1] = alias_id
                 except:
-                    what_exception()
+                    log_exception()
 
                 async with await db.execute(sql, info) as cursor:
                     await init_status_row(
@@ -76,5 +83,5 @@ async def insert_imports_test_data(db, test_data=IMPORTS_TEST_DATA):
 
                 await db.commit()
         except:
-            what_exception()
+            log_exception()
             continue
