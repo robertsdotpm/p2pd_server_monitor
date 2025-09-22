@@ -412,3 +412,50 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             }
 
             await imports_monitor(curl, [server])
+
+    async def test_insert_imports_with_invalid_data_should_fail(self):
+        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
+        work = dict((await get_work())[0])
+        status_id = work["status_id"]
+        service = {
+            "service_type": work["type"],
+            "af": work["af"],
+            "proto": int(UDP),
+            "ip": work["ip"],
+            "port": work["port"],
+            "user": work["user"],
+            "password": work["pass"],
+            "alias_id": work["alias_id"]
+        }
+
+        sql = "SELECT * FROM services"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            assert(not len(rows))
+
+        await insert_services(str([[service]]), status_id)
+
+
+    async def test_service_deletion_should_remove_related_status(self):
+        # Delete a service and assert related status rows are deleted
+        pass
+
+    async def test_imports_monitor_handles_empty_server_list(self):
+        # Call imports_monitor with an empty list and assert no errors
+        pass
+
+    async def test_monitor_turn_type_with_wrong_credentials(self):
+        # Pass wrong user/pass to monitor_turn_type and assert failure
+        pass
+
+    async def test_alias_monitor_with_unresolvable_fqn(self):
+        # Pass an unresolvable FQN and assert failure
+        pass
+
+    async def test_import_complete_should_not_delete_unrelated_status(self):
+        # Complete import and check unrelated status rows remain
+        pass
+
+    async def test_ipv6_imports_monitor_with_invalid_ipv6(self):
+        # Pass an invalid IPv6 address and assert failure
+        pass

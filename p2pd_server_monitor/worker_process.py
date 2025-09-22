@@ -42,10 +42,16 @@ async def worker_loop(nic=None):
     curl = WebCurl(endpoint, route)
     while 1:
         print("Fetching work... ")
+        try:
+            is_success = await asyncio.wait_for(
+                worker(nic, curl), timeout=6
+            )
+        except asyncio.TimeoutError:
+            is_success = 0
 
-        is_success = await worker(nic, curl)
         if not is_success:
             await asyncio.sleep(1)
+        
 
 
 if __name__ == "__main__":
