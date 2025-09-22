@@ -87,8 +87,9 @@ async def claim_group(db, group_records, alloc_time):
         rows = await cursor.fetchall()
         for row in rows:
             # If any row is STATUS_DEALT and not timed out, cannot claim
-            if row["status"] == STATUS_DEALT and t < row["last_status"] + WORKER_TIMEOUT:
-                return False
+            if row["status"] == STATUS_DEALT: 
+                if t < (row["last_status"] + WORKER_TIMEOUT):
+                    return False
 
     # All rows are available or timed out, proceed to claim
     async with db.execute("BEGIN"):
