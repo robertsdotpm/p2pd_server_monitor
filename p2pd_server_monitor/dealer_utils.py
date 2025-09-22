@@ -73,12 +73,11 @@ async def fetch_or_insert_alias(db, af, fqn):
 
     return await record_alias(db, af, fqn)
 
-async def get_max_group_id(db):
-    sql = "SELECT IFNULL(MAX(group_id), 0) FROM services"
-    async with db.execute(sql) as cursor:
-        return (await cursor.fetchone())[0]
-
-    return 0
+async def get_new_group_id(db):
+    # Insert a dummy row and get its id atomically
+    async with db.execute("INSERT INTO groups DEFAULT VALUES") as cursor:
+        await db.commit()
+        return cursor.lastrowid
 
 async def insert_service(
     db,

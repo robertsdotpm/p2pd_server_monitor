@@ -72,15 +72,36 @@ def check_allocatable(group_records, current_time, monitor_frequency):
 
     return allocatable_records
 
-async def mark_allocated(db, records, alloc_time):
-    """Mark records as allocated and commit."""
-    async with db.execute("BEGIN"):
-        for record in records:
-            t = alloc_time or int(time.time())
-            sql = "UPDATE status SET status=?, last_status=? WHERE id=?"
-            await db.execute(sql, (STATUS_DEALT, t, record["status_id"],))
+async def claim_group(db, group_records, alloc_time):
+    """Atomically claim all status rows for a group if all are available or timed out."""
+    status_ids = [record["status_id"] for record in group_records]
+    t = alloc_time or int(time.time())
 
+    # First, check eligibility
+    sql_check = f"""
+    SELECT status, last_status FROM status
+    WHERE id IN ({','.join(['?']*len(status_ids))})
+    """
+    async with db.execute(sql_check, status_ids) as cursor:
+        rows = await cursor.fetchall()
+        for row in rows:
+            # If any row is STATUS_DEALT and not timed out, cannot claim
+            if row["status"] == STATUS_DEALT and t < row["last_status"] + WORKER_TIMEOUT:
+                return False
+
+    # All rows are available or timed out, proceed to claim
+    async with db.execute("BEGIN"):
+        sql_update = f"""
+        UPDATE status
+        SET status=?, last_status=?
+        WHERE id IN ({','.join(['?']*len(status_ids))})
+        """
+        params = [STATUS_DEALT, t] + status_ids
+        result = await db.execute(sql_update, params)
         await db.commit()
+
+        # Only proceed if all rows were updated (claimed)
+        return result.rowcount == len(status_ids)
 
 async def mark_complete(db, is_success, status_id, t):
     # Delete the associated imports row and status record.

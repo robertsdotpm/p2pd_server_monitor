@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS "aliases" (
 	UNIQUE("fqn","af"),
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
+CREATE TABLE IF NOT EXISTS "groups" (
+	"id"	INTEGER,
+	PRIMARY KEY("id" AUTOINCREMENT)
+);
 CREATE TABLE IF NOT EXISTS "imports" (
 	"id"	INTEGER,
 	"type"	INTEGER NOT NULL CHECK("type" BETWEEN 1 AND 5),
@@ -154,14 +158,6 @@ BEGIN
         )
         THEN RAISE(ABORT, 'Conflict: type 1 with same ip and af exists')
     END;
-END;
-CREATE TRIGGER increment_test_no
-AFTER UPDATE OF uptime ON status
-FOR EACH ROW
-BEGIN
-    UPDATE status
-    SET test_no = (test_no + 1) % 1000000
-    WHERE id = NEW.id;
 END;
 CREATE TRIGGER reset_uptime_on_failure
 AFTER UPDATE OF failed_tests ON status

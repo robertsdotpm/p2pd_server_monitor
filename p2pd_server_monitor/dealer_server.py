@@ -81,6 +81,7 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
 
         print("status entries = ", status_entries)
 
+        
         # Get a group of service(s), aliases, or imports.
         # Check if its allocatable, mark it allocated, and return it.
         current_time = current_time or int(time.time())
@@ -93,9 +94,11 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
             )
 
             if allocatable_records:
-                await mark_allocated(db, allocatable_records, current_time)
-                return allocatable_records
-
+                # Atomically claim the group
+                claimed = await claim_group(db, group_records, current_time)
+                if claimed:
+                    return allocatable_records
+        
     return []
 
 # Worker processes check in to signal status of work.
@@ -185,18 +188,19 @@ async def insert_services(imports_list, status_id):
     async with aiosqlite.connect(DB_NAME) as db:
         db.row_factory = aiosqlite.Row
 
+        # Create list of group IDs for each service(s) list.
+        group_ids = []
+        for _ in imports_list:
+            group_id = await get_new_group_id(db)
+            group_ids.append(group_id)
+
         # Single atomic transaction for all inserts, dels, etc.
         async with db.execute("BEGIN"):
-            group_id = 0
             for services in imports_list:
                 print("services = ", type(services), services)
 
-                # All inserts use the same group ID.
-                new_group_id = await get_max_group_id(db) + 1
-                assert(new_group_id > group_id)
-                group_id = new_group_id
-
                 # All inserts happen in the same transaction.
+                group_id = group_ids.pop(0)
                 for service in services:
                     service["group_id"] = group_id
                     service["db"] = db

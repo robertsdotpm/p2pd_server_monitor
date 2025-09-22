@@ -15,8 +15,8 @@ async def init_settings_table(db):
     await db.commit()
 
 async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
-    group_id = 0
     for groups in test_data:
+        group_id = await get_new_group_id(db)
         try:
             async with db.execute("BEGIN"):
                 # Store alias(es)
@@ -29,10 +29,6 @@ async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
                     log_exception()
 
                 # All items in a group share the same group ID.
-                new_group_id = await get_max_group_id(db) + 1
-                assert(new_group_id > group_id)
-                group_id = new_group_id
-
                 for group in groups:
                     insert_id = await insert_service(
                         db=db,
