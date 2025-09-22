@@ -51,6 +51,9 @@ app = FastAPI(default_response_class=PrettyJSONResponse)
 @app.on_event("startup")
 async def main():
     async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute("PRAGMA journal_mode=WAL;")
+        await db.execute('PRAGMA busy_timeout = 5000') # Wait up to 5 seconds
+
         try:
             await delete_all_data(db)
             await init_settings_table(db)
