@@ -42,7 +42,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
         assert(VALID_IMPORTS_TEST_DATA == rows)
 
-    async def test_import_complete_should_delete_status(self):
+    async def test_import_complete_should_disable_status(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
         work = (await get_work())[0]
         assert(work["table_type"] == IMPORTS_TABLE_TYPE)
@@ -56,16 +56,16 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         await signal_complete_work(str([work]))
 
         # Attached status should not exist.
-        sql = "SELECT * FROM status WHERE id = ?"
-        async with self.db.execute(sql, (work["status_id"],)) as cursor:
+        sql = "SELECT * FROM status WHERE id = ? AND status != ?"
+        async with self.db.execute(sql, (work["status_id"], STATUS_DISABLED,)) as cursor:
             rows = await cursor.fetchall()
             assert(not len(rows))
 
-        # Might as well check initial import was deleted.
+        #  Initial import row should still exist.
         sql = "SELECT * FROM imports WHERE id = ?"
         async with self.db.execute(sql, (row_id,)) as cursor:
             rows = await cursor.fetchall()
-            assert(not len(rows))
+            assert(len(rows))
 
     # TODO: check alias status and service status deleted for triggers.
 
@@ -468,7 +468,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         except:
             pass
 
-
     async def test_service_deletion_should_remove_related_status(self):
         test_data = SERVICES_TEST_DATA[:]
         for group in test_data:
@@ -489,20 +488,14 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         pass
 
     async def test_alias_monitor_with_unresolvable_fqn(self):
+        return
+        
         # Pass an unresolvable FQN and assert failure
-        pass
+        route = self.nic.route(IP4)
+        curl = WebCurl(("example.com", 80), route)
+        ret = await alias_monitor(curl, alias)
     
-    async def test_multiple_server_failures_should_not_crash_worker(self):
+    async def test_concurrent_workers_vs_locking_issues(self):
         pass
 
-    async def test_worker_handles_timeout_for_unresponsive_servers(self):
-        pass
-
-    async def test_worker_retries_on_transient_network_errors(self):
-        pass
-
-    async def test_worker_handles_malformed_server_data_without_crash(self):
-        pass
-
-    async def test_concurrent_workers_do_not_corrupt_status_data(self):
-        pass
+    # TODO: some test cases for concurrency issues.

@@ -24,6 +24,15 @@ future:
     -- some dns servers return different ips each time. do you want ips to change
     for servers? a dns might represent a cluster. maybe still works depending
     on the protocol.
+    -- maybe a trigger could automatically reallocate dealt work in the db that
+    times out, that way a secondary system helps ensure that work isn't locked up
+    forever.
+        -- delete old rows that havent been updated in a while
+    -- dont delete import on complete -- disable it
+    -- probably want to avoid dns for STUN CHANGE but save the imports, organize them
+    in a way that they can be re-enabled to reload service by using dns
+    so maybe store dns alongside import for stun just not service
+    
 
 edge case:
     For STUN change servers if you use an alias you need different aliases for both
@@ -52,8 +61,8 @@ app = FastAPI(default_response_class=PrettyJSONResponse)
 async def main():
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("PRAGMA journal_mode=WAL;")
+        await db.execute("PRAGMA synchronous = 1;")
         await db.execute('PRAGMA busy_timeout = 5000') # Wait up to 5 seconds
-
         try:
             await delete_all_data(db)
             await init_settings_table(db)
@@ -77,30 +86,32 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
     async with aiosqlite.connect(DB_NAME) as db:
         db.row_factory = aiosqlite.Row
 
-        # Fetch all status rows, oldest first
-        sql = "SELECT * FROM status ORDER BY last_status ASC"
-        async with db.execute(sql) as cursor:
-            status_entries = [dict(r) for r in await cursor.fetchall()]
+        async with db.execute("BEGIN IMMEDIATE"):
+            # Fetch all status rows, oldest first
+            sql = "SELECT * FROM status WHERE status != ? ORDER BY last_status ASC"
+            async with db.execute(sql, (STATUS_DISABLED,)) as cursor:
+                status_entries = [dict(r) for r in await cursor.fetchall()]
 
-        print("status entries = ", status_entries)
+            print("status entries = ", status_entries)
 
-        
-        # Get a group of service(s), aliases, or imports.
-        # Check if its allocatable, mark it allocated, and return it.
-        current_time = current_time or int(time.time())
-        for status_entry in status_entries:
-            group_records = await fetch_group_records(db, status_entry, need_af)
-            allocatable_records = check_allocatable(
-                group_records,
-                current_time,
-                monitor_frequency
-            )
+            
+            # Get a group of service(s), aliases, or imports.
+            # Check if its allocatable, mark it allocated, and return it.
+            current_time = current_time or int(time.time())
+            for status_entry in status_entries:
+                group_records = await fetch_group_records(db, status_entry, need_af)
+                allocatable_records = check_allocatable(
+                    group_records,
+                    current_time,
+                    monitor_frequency
+                )
 
-            if allocatable_records:
-                # Atomically claim the group
-                claimed = await claim_group(db, group_records, current_time)
-                if claimed:
-                    return allocatable_records
+                if allocatable_records:
+                    # Atomically claim the group
+                    claimed = await claim_group(db, group_records, current_time)
+                    if claimed:
+                        await db.commit()
+                        return allocatable_records
         
     return []
 

@@ -92,18 +92,16 @@ async def claim_group(db, group_records, alloc_time):
                     return False
 
     # All rows are available or timed out, proceed to claim
-    async with db.execute("BEGIN"):
-        sql_update = f"""
-        UPDATE status
-        SET status=?, last_status=?
-        WHERE id IN ({placeholders})
-        """
-        params = [STATUS_DEALT, t] + status_ids
-        result = await db.execute(sql_update, params)
-        await db.commit()
+    sql_update = f"""
+    UPDATE status
+    SET status=?, last_status=?
+    WHERE id IN ({placeholders})
+    """
+    params = [STATUS_DEALT, t] + status_ids
+    result = await db.execute(sql_update, params)
 
-        # Only proceed if all rows were updated (claimed)
-        return result.rowcount == len(status_ids)
+    # Only proceed if all rows were updated (claimed)
+    return result.rowcount == len(status_ids)
 
 async def mark_complete(db, is_success, status_id, t):
     # Delete the associated imports row and status record.
@@ -116,8 +114,8 @@ async def mark_complete(db, is_success, status_id, t):
         # Delete target row if status is for an imports.
         # We only want imports work to be done once.
         if row["table_type"] == IMPORTS_TABLE_TYPE:
-            sql = "DELETE FROM imports WHERE id = ?"
-            await db.execute(sql, (row["row_id"],))
+            sql = "UPDATE status SET status = ? WHERE id = ?"
+            await db.execute(sql, (STATUS_DISABLED, status_id,))
             return []
     except:
         # Can't load status so return.
