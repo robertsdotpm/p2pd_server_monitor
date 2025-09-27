@@ -137,7 +137,7 @@ async def signal_complete_work(statuses):
             # Save all changes as atomic TX.
             await db.commit()
 
-    return results
+    return results 
 
 #Show a listing of servers based on quality
 @app.get("/servers")

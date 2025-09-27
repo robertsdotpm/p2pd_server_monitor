@@ -49,35 +49,7 @@ async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
             log_exception()
 
 async def insert_imports_test_data(db, test_data=IMPORTS_TEST_DATA):
-    sql  = "INSERT INTO imports (type, af, ip, port, user, pass, alias_id) "
-    sql += "VALUES (?, ?, ?, ?, ?, ?, ?)"
     for info in test_data:
         fqn = info[0]
         info = info[1:]
-        info[2] = ensure_ip_is_public(info[2])
-        try:
-            async with db.execute("BEGIN"):
-                # Associate alias record with this insert.
-                info.append(None)
-                try:
-                    if fqn:
-                        # Update IP field.
-                        res = await async_res_domain_af(info[1], fqn)
-                        info[2] = res[1]
-
-                        alias_id = await fetch_or_insert_alias(db, info[1], fqn)
-                        info[-1] = alias_id
-                except:
-                    log_exception()
-
-                async with await db.execute(sql, info) as cursor:
-                    await init_status_row(
-                        db,
-                        cursor.lastrowid,
-                        IMPORTS_TABLE_TYPE
-                    )
-
-                await db.commit()
-        except:
-            log_exception()
-            continue
+        await insert_import(db, *info, fqn=fqn)
