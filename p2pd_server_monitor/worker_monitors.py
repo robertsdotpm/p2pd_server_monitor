@@ -1,5 +1,4 @@
 import asyncio
-import aiosqlite
 from p2pd import *
 from .dealer_defs import *
 from .worker_utils import *
@@ -99,7 +98,6 @@ async def monitor_ntp_type(nic, work):
 async def service_monitor(nic, work):
     is_success = status_ids = []
     work_type = work[0]["type"]
-    print("Work type = ", work_type)
 
     if len(work) == 1:
         if work_type == STUN_MAP_TYPE:
@@ -116,9 +114,7 @@ async def service_monitor(nic, work):
 
     if len(work) == 4:
         if work_type == STUN_CHANGE_TYPE:
-            print("stun inside change type")
             is_success, status_ids = await monitor_stun_change_type(nic, work)
-            print("change servers validated")
     
     return is_success, status_ids
 
@@ -129,8 +125,6 @@ async def imports_monitor(curl, pending_insert):
         pending_insert[0],
         service_monitor
     )
-
-    print(validated_lists)
 
     # Create a list of groups (a group can have one or more related services.)
     imports_list = []
@@ -161,8 +155,6 @@ async def imports_monitor(curl, pending_insert):
 
 async def alias_monitor(curl, alias):
     nic = curl.route.interface
-    print("in alias monitor ", alias)
-
     addr = await Address(alias[0]["fqn"], 80, nic)
     ip = addr.select_ip(alias[0]["af"]).ip
     if ip:

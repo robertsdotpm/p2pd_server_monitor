@@ -129,7 +129,6 @@ async def insert_service(
     if alias_id:
         alias_row = await load_alias_row(db, alias_id)
         if not alias_row:
-            print("insert here")
             raise Exception("Alias ID does not exist.")
 
     # SQL statement for insert into services.

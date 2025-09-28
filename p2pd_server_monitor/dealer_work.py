@@ -52,10 +52,6 @@ def check_allocatable(group_records, current_time, monitor_frequency):
         if elapsed < 0:
             continue
 
-        print("elapsed = ", elapsed)
-        print("monitor freq = ", monitor_frequency)
-        print("status = ", record["status"])
-
         if record["status"] == STATUS_DEALT:
             if elapsed >= WORKER_TIMEOUT:
                 record["status"] = STATUS_AVAILABLE
@@ -124,7 +120,6 @@ async def mark_complete(db, is_success, status_id, t):
 
     # Update fields if a server test was successful.
     if is_success:
-        print("in is success")
         sql = """
         UPDATE status
         SET

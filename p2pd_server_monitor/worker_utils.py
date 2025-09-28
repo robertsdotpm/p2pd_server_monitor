@@ -13,32 +13,28 @@ async def validate_stun_server(ip, port, pipe, mode, cip=None, cport=None):
         mode=mode
     )
 
-    print("validate stun server = ", ip, ":", port)
-
     # Lowever level -- get STUN reply.
     reply = None
     if mode == RFC3489:
         # Reply from different port only.
         if cport is not None and cip is None:
-            print("change port", ip, ":", cport)
+            #print("change port", ip, ":", cport)
             reply = await stun_client.get_change_port_reply((ip, cport), pipe)
             
 
         # Reply from different IP:port only.
         if cip is not None and cport is not None:
-            print("change ip:port", cip, ":", cport)
+            #print("change ip:port", cip, ":", cport)
             reply = await stun_client.get_change_tup_reply((cip, cport), pipe)
 
         # The NAT test code doesn't need to very just the IP.
         # So that edge case is not checked.
         # if cip is not None and cport is None: etc
         if cip is None and cport is None:
-            print("get reug stun reply.")
+            #print("get reug stun reply.")
             reply = await stun_client.get_stun_reply(pipe=pipe)
     else:
         reply = await stun_client.get_stun_reply(pipe=pipe)
-
-    print(reply)
     
     # Validate the reply.
     reply = validate_stun_reply(reply, mode)
@@ -83,7 +79,6 @@ async def stun_server_classifier(af, ip, port, nic):
                 secondary_tup
             )
 
-            print("valid rfc 3489")
             servers.append([
                 [STUN_CHANGE_TYPE, int(af), int(UDP), ip, port, None, None],
                 [STUN_CHANGE_TYPE, int(af), int(UDP), ip, reply.ctup[1], None, None],
@@ -125,7 +120,6 @@ async def stun_server_classifier(af, ip, port, nic):
             log_exception()
             continue
 
-    print(servers)
     return servers
 
 # So with RFC 3489 there's actualoly 4 STUN servers to check:
@@ -145,12 +139,8 @@ async def validate_rfc3489_stun_server(af, proto, nic, primary_tup, secondary_tu
         (primary_tup[0], primary_tup[1], secondary_tup[0], secondary_tup[2],),
     ]
 
-    print("infos = ")
-    print(infos)
-
     route = nic.route(af)
     pipe = await pipe_open(proto, route=route)
-
 
     # Compare IPS in different tups (must be different)
     if IPR(primary_tup[0], af) == IPR(secondary_tup[0], af):
@@ -163,9 +153,6 @@ async def validate_rfc3489_stun_server(af, proto, nic, primary_tup, secondary_tu
     # Test each STUN server.
     for info in infos:
         dest_ip, dest_port, cip, cport = info
-        print(info)
-        print()
-
         await validate_stun_server(
             ip=dest_ip,
             port=dest_port,
@@ -175,39 +162,27 @@ async def validate_rfc3489_stun_server(af, proto, nic, primary_tup, secondary_tu
             cport=cport
         )
 
-        print("validate stun server n success")
-
 async def fetch_work_list(curl):
     nic = curl.route.interface
-    while 1:
-        # Fetch work from dealer server.
-        resp = await curl.vars({"stack_type": int(nic.stack)}).get("/work")
-        if resp.info is None:
-            await asyncio.sleep(5)
-            continue
-        else:
-            print(resp.out)
-            work = json.loads(to_s(resp.out))
 
-        f = lambda r: r["id"]
-        work = sorted(work, key=f)
+    # Fetch work from dealer server.
+    resp = await curl.vars({"stack_type": int(nic.stack)}).get("/work")
+    if resp.info is None:
+        await asyncio.sleep(5)
+        continue
+    else:
+        work = json.loads(to_s(resp.out))
 
-        print(work)
+    f = lambda r: r["id"]
+    work = sorted(work, key=f)
+    for grouped in work:
+        if hasattr(grouped, "af"):
+            grouped["af"] = IP4 if grouped["af"] == 2 else IP6
 
-        for grouped in work:
-            if hasattr(grouped, "af"):
-                grouped["af"] = IP4 if grouped["af"] == 2 else IP6
+        if hasattr(grouped, "proto"):
+            grouped["proto"] = UDP if grouped["proto"] == 2 else TCP
 
-            if hasattr(grouped, "proto"):
-                grouped["proto"] = UDP if grouped["proto"] == 2 else TCP
-
-
-        # If there's no work -- sleep and continue.
-        if not len(work):
-            await asyncio.sleep(5)
-            continue
-
-        return work
+    return work
 
 async def update_work_status(curl, status_ids, is_success):
     # Indicate the status outcome.
@@ -233,8 +208,6 @@ async def validate_service_import(nic, pending_insert, service_monitor):
         # Reuse the existing code for validation.
         is_success, status_ids = await service_monitor(nic, [pending_insert])
         service_type = pending_insert["type"]
-
-        print("service monitor in validate service import = ", is_success)
         if service_type in (MQTT_TYPE, NTP_TYPE, TURN_TYPE,):
             proto = UDP
         else:

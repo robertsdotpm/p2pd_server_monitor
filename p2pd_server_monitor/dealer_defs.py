@@ -3,7 +3,7 @@ from p2pd import UDP, TCP, V4, V6
 # Placeholder -- fix this.
 DB_NAME = "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/monitor.sqlite3"
 WORKER_TIMEOUT = 120
-MONITOR_FREQUENCY = 10
+MONITOR_FREQUENCY = 60 * 60
 MAX_SERVER_DOWNTIME = 600
 
 ####################################################################################

@@ -80,8 +80,6 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
     else:
         need_af = stack_type if stack_type in VALID_AFS else "%"
 
-    print("in get work")
-
     # Connect to DB and find some work.
     async with aiosqlite.connect(DB_NAME) as db:
         db.row_factory = aiosqlite.Row
@@ -92,9 +90,6 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
             async with db.execute(sql, (STATUS_DISABLED,)) as cursor:
                 status_entries = [dict(r) for r in await cursor.fetchall()]
 
-            print("status entries = ", status_entries)
-
-            
             # Get a group of service(s), aliases, or imports.
             # Check if its allocatable, mark it allocated, and return it.
             current_time = current_time or int(time.time())
@@ -195,8 +190,6 @@ async def update_alias(alias_id: int, ip: str):
 async def insert_services(imports_list, status_id):
     # Convert dict string back to Python.
     imports_list = ast.literal_eval(imports_list)
-    print("imports list = ", type(imports_list), " ", imports_list)
-    print("imports list [0] = ", type(imports_list[0]))
 
     # DB connection for sqlite.
     async with aiosqlite.connect(DB_NAME) as db:
@@ -211,8 +204,6 @@ async def insert_services(imports_list, status_id):
         # Single atomic transaction for all inserts, dels, etc.
         async with db.execute("BEGIN"):
             for services in imports_list:
-                print("services = ", type(services), services)
-
                 # All inserts happen in the same transaction.
                 group_id = group_ids.pop(0)
                 for service in services:
