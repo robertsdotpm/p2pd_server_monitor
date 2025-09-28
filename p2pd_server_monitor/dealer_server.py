@@ -2,9 +2,7 @@
 I'll put notes here.
 
 Priority:
-    -- seems to be a bug where adding logging causes code not to run, def need to not skip writing unit tests at the end of all this
-    
-    -- unit tests.
+
     -- wll use pub bind for fastapi and for private calls reject non-local client src.
     add auth later on7
     -- integration

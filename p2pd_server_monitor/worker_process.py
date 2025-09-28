@@ -11,7 +11,7 @@ async def worker(nic, curl, init_work=None):
         work = init_work or (await fetch_work_list(curl))
         if not len(work):
             print("No work found")
-            return 1
+            return 0
 
         is_success = status_ids = []
         table_type = work[0]["table_type"]

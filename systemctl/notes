@@ -1,0 +1,9 @@
+/etc/systemd/system/p2pd_monitor.service
+
+
+export MONITOR_WORKER_NO=5
+
+sudo systemctl daemon-reload
+sudo systemctl enable p2pd_monitor
+sudo systemctl start p2pd_monitor
+sudo journalctl -u p2pd_monitor -f
