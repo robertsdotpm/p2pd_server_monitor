@@ -168,8 +168,7 @@ async def fetch_work_list(curl):
     # Fetch work from dealer server.
     resp = await curl.vars({"stack_type": int(nic.stack)}).get("/work")
     if resp.info is None:
-        await asyncio.sleep(5)
-        continue
+        return []
     else:
         work = json.loads(to_s(resp.out))
 

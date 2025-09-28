@@ -60,7 +60,10 @@ async def worker(nic, curl, init_work=None):
         return 0
 
 async def worker_loop(nic=None):
+    print("Loading interface...")
     nic = nic or (await Interface())
+    print("Interface loaded: ", nic)
+
     endpoint = ("127.0.0.1", 8000,)
     route = nic.route(IP4)
     curl = WebCurl(endpoint, route)
