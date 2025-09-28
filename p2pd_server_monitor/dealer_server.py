@@ -2,8 +2,10 @@
 I'll put notes here.
 
 Priority:
-    --exp backoff based on service downtime
-    avoid having all the checks occur at the same time even if the threshold is met
+    -- For STUN change servers if you use an alias you need different aliases for both
+    primary and change IPs OR no aliases. a single alias means that the pair will
+    break on DNS IP updates.
+        -- add an assert for this
     -- get a list of servers
     -- integration
     -- publish
@@ -18,20 +20,10 @@ future:
     -- some dns servers return different ips each time. do you want ips to change
     for servers? a dns might represent a cluster. maybe still works depending
     on the protocol.
-    -- maybe a trigger could automatically reallocate dealt work in the db that
-    times out, that way a secondary system helps ensure that work isn't locked up
-    forever.
         -- delete old rows that havent been updated in a while
     -- dont delete import on complete -- disable it
-    -- probably want to avoid dns for STUN CHANGE but save the imports, organize them
-    in a way that they can be re-enabled to reload service by using dns
-    so maybe store dns alongside import for stun just not service
-    
 
 edge case:
-    For STUN change servers if you use an alias you need different aliases for both
-    primary and change IPs OR no aliases. a single alias means that the pair will
-    break on DNS IP updates.
     - negative uptimes possible if time manually set in the past but this is
     still useful for tests and these APIs wont be public
 """

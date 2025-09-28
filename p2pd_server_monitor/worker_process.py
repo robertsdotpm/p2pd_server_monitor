@@ -1,4 +1,5 @@
 import asyncio
+ random
 from p2pd import *
 from .dealer_defs import *
 from .worker_utils import *
@@ -76,7 +77,12 @@ async def worker_loop(nic=None):
             is_success = 0
 
         if not is_success:
-            await asyncio.sleep(1)
+            # Random stagger period before retry.
+            # This avoids every worker hitting the server at once.
+            # It also distributes work evenly over time.
+            n = random.randrange(1, MONITOR_FREQUENCY)
+            print("Sleeping until next try in secs: ", n)
+            await asyncio.sleep(n)
         
 if __name__ == "__main__":
     asyncio.run(worker_loop())
