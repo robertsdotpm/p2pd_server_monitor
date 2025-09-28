@@ -2,15 +2,9 @@
 I'll put notes here.
 
 Priority:
-    -- For STUN change servers if you use an alias you need different aliases for both
-    primary and change IPs OR no aliases. a single alias means that the pair will
-    break on DNS IP updates.
-        -- add an assert for this
-    -- get a list of servers
+    -- add a list of servers
     -- integration
-    -- publish
-
--- then actually process all ips and service types to import for the DB (boring)
+    -- merge and publish
 
 future:
     -- technically A and AAA dns can map to a list of IPs so my data structure for
@@ -20,8 +14,10 @@ future:
     -- some dns servers return different ips each time. do you want ips to change
     for servers? a dns might represent a cluster. maybe still works depending
     on the protocol.
+
+    -- cleanup ideas:
         -- delete old rows that havent been updated in a while
-    -- dont delete import on complete -- disable it
+        -- dont delete import on complete -- disable it
 
 edge case:
     - negative uptimes possible if time manually set in the past but this is
@@ -159,12 +155,20 @@ async def insert_services(imports_list, status_id):
         # Single atomic transaction for all inserts, dels, etc.
         async with db.execute("BEGIN"):
             for services in imports_list:
+                alias_count = 0
+
                 # All inserts happen in the same transaction.
                 group_id = group_ids.pop(0)
                 for service in services:
                     service["group_id"] = group_id
                     service["db"] = db
+                    if service["alias_id"]:
+                        alias_count += 1
                     await insert_service(**service)
+
+                # STUN change servers should have all or no alias.
+                if services[0]["service_type"] == STUN_CHANGE_TYPE:
+                    assert(alias_count in (0, 4,))
 
             # Only allocate imports work once.
             # This deletes the associated status record. 

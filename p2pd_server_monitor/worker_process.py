@@ -1,5 +1,5 @@
 import asyncio
- random
+import random
 from p2pd import *
 from .dealer_defs import *
 from .worker_utils import *
