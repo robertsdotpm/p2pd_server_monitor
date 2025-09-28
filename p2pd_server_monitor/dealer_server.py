@@ -2,19 +2,15 @@
 I'll put notes here.
 
 Priority:
-
-    -- wll use pub bind for fastapi and for private calls reject non-local client src.
-    add auth later on7
+    --exp backoff based on service downtime
+    avoid having all the checks occur at the same time even if the threshold is met
+    -- get a list of servers
     -- integration
     -- publish
 
 -- then actually process all ips and service types to import for the DB (boring)
 
 future:
-    --exp backoff based on service downtime
-    avoid having all the checks occur at the same time even if the threshold is met
-    - i think the issue is all files that import P2PD use the same log file path and
-    cant write to it if they are different processes -- maybe update this
     -- technically A and AAA dns can map to a list of IPs so my data structure for
     aliases are wrong but lets roll with it to start with since its simple.
     -- some servers have additional meta data like even PNP has oub keys and turn
@@ -41,17 +37,14 @@ edge case:
 """
 
 import uvicorn
-import asyncio
 import ast
 import aiosqlite
-from typing import Union, Any
-from fastapi import FastAPI
-import json
-import math
+from fastapi import FastAPI, Request, HTTPException, Depends
 from p2pd import *
 from .dealer_utils import *
 from .db_init import *
 from .dealer_work import *
+from .txt_strs import *
 
 app = FastAPI(default_response_class=PrettyJSONResponse)
 
@@ -61,6 +54,7 @@ async def main():
         await db.execute("PRAGMA journal_mode=WAL;")
         await db.execute("PRAGMA synchronous = 1;")
         await db.execute('PRAGMA busy_timeout = 5000') # Wait up to 5 seconds
+        await db.commit()
         try:
             #await delete_all_data(db)
             await init_settings_table(db)
@@ -69,8 +63,13 @@ async def main():
         except:
             what_exception()
 
+def localhost_only(request: Request):
+    client_host = request.client.host
+    if client_host not in ("127.0.0.1", "::1"):
+        raise HTTPException(status_code=403, detail="Access forbidden")
+
 # Hands out work (servers to check) to worker processes.
-@app.get("/work")
+@app.get("/work", dependencies=[Depends(localhost_only)])
 async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY):
     # Indicate IPv4 / 6 support of worker process.
     if stack_type == DUEL_STACK:
@@ -109,7 +108,7 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
     return []
 
 # Worker processes check in to signal status of work.
-@app.get("/complete")
+@app.get("/complete", dependencies=[Depends(localhost_only)])
 async def signal_complete_work(statuses):
     # Convert dict string back to Python.
     statuses = ast.literal_eval(statuses)
@@ -132,41 +131,7 @@ async def signal_complete_work(statuses):
 
     return results 
 
-#Show a listing of servers based on quality
-@app.get("/servers")
-async def list_servers():
-    servers = {}
-    async with aiosqlite.connect(DB_NAME) as db:
-        db.row_factory = aiosqlite.Row
-
-        # Server listing per service type.
-        for service_type in SERVICE_TYPES:
-            servers[service_type] = {}
-
-            # Sub-divided by transport support.
-            for proto in (UDP, TCP,):
-                servers[service_type][proto] = {}
-
-                # Then by address family supported.
-                for af in VALID_AFS:
-                    sql = """
-                    SELECT *
-                    FROM service_quality
-                    WHERE type = ? 
-                    AND proto = ? 
-                    AND af = ?
-                    ORDER BY group_score DESC, service_id ASC;
-                    """
-                    params = (service_type, proto, af,)
-                    async with db.execute(sql, params) as cursor:
-                        rows = [dict(r) for r in await cursor.fetchall()]
-
-                    # Assign the list of groups to the nested structure
-                    servers[service_type][proto][af] = rows
-
-    return servers
-
-@app.get("/alias")
+@app.get("/alias", dependencies=[Depends(localhost_only)])
 async def update_alias(alias_id: int, ip: str):
     ip = ensure_ip_is_public(ip)
     async with aiosqlite.connect(DB_NAME) as db:
@@ -184,7 +149,7 @@ async def update_alias(alias_id: int, ip: str):
 
     return [alias_id]
 
-@app.get("/insert")
+@app.get("/insert", dependencies=[Depends(localhost_only)])
 async def insert_services(imports_list, status_id):
     # Convert dict string back to Python.
     imports_list = ast.literal_eval(imports_list)
@@ -221,10 +186,45 @@ async def insert_services(imports_list, status_id):
             # Commit all changes at once.
             await db.commit()
 
+# Show a listing of servers based on quality
+# Only public API is this one.
+@app.get("/servers")
+async def list_servers():
+    servers = {}
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
+
+        # Server listing per service type.
+        for service_type in SERVICE_TYPES:
+            per_type = servers[TXTS[service_type]] = {}
+            
+            # Sub-divided by transport support.
+            for proto in (UDP, TCP,):
+                per_proto = per_type[TXTS["proto"][proto]] = {}
+
+                # Then by address family supported.
+                for af in VALID_AFS:
+                    sql = """
+                    SELECT *
+                    FROM service_quality
+                    WHERE type = ? 
+                    AND proto = ? 
+                    AND af = ?
+                    ORDER BY group_score DESC, service_id ASC;
+                    """
+                    params = (service_type, proto, af,)
+                    async with db.execute(sql, params) as cursor:
+                        rows = [dict(r) for r in await cursor.fetchall()]
+
+                    # Assign the list of groups to the nested structure
+                    per_af = per_proto[TXTS["af"][af]] = rows
+
+    return servers
+
 if __name__ == "__main__":
     uvicorn.run(
         "p2pd_server_monitor.dealer_server:app",
-        host="127.0.0.1",
+        host="*",
         port=8000,
         reload=False
     )

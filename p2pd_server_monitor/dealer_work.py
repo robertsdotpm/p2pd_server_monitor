@@ -55,9 +55,9 @@ def check_allocatable(group_records, current_time, monitor_frequency):
         if record["status"] == STATUS_DEALT:
             if elapsed >= WORKER_TIMEOUT:
                 record["status"] = STATUS_AVAILABLE
-
-        if elapsed < monitor_frequency:
-            record["status"] = STATUS_DEALT
+        else:
+            if elapsed < monitor_frequency:
+                record["status"] = STATUS_DEALT
 
         if record["status"] == STATUS_AVAILABLE:
             allocatable_records.append(record)
