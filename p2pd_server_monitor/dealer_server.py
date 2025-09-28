@@ -64,7 +64,7 @@ async def main():
         await db.execute("PRAGMA synchronous = 1;")
         await db.execute('PRAGMA busy_timeout = 5000') # Wait up to 5 seconds
         try:
-            await delete_all_data(db)
+            #await delete_all_data(db)
             await init_settings_table(db)
             await insert_imports_test_data(db)
             await db.commit()

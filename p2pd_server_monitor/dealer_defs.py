@@ -10,22 +10,22 @@ MAX_SERVER_DOWNTIME = 600
 SERVICE_SCHEMA = ("type", "af", "proto", "ip", "port", "group_id")
 STATUS_SCHEMA = ("row_id", "table_type", "status", "last_status", "test_no")
 STATUS_SCHEMA += ("failed_tests", "last_success", "last_uptime")
-STUN_MAP_TYPE = 1
-STUN_CHANGE_TYPE = 2
-MQTT_TYPE = 3
-TURN_TYPE = 4
-NTP_TYPE = 5
-PNP_TYPE = 6
+STUN_MAP_TYPE = 3
+STUN_CHANGE_TYPE = 4
+MQTT_TYPE = 5
+TURN_TYPE = 6
+NTP_TYPE = 7
+PNP_TYPE = 8
 SERVICE_TYPES  = (STUN_MAP_TYPE, STUN_CHANGE_TYPE, MQTT_TYPE,)
 SERVICE_TYPES += (TURN_TYPE, NTP_TYPE, PNP_TYPE)
 
-STATUS_AVAILABLE = 0
-STATUS_DEALT = 1
-STATUS_INIT = 2
-STATUS_DISABLED = 3
-SERVICES_TABLE_TYPE = 1
-ALIASES_TABLE_TYPE = 2
-IMPORTS_TABLE_TYPE = 3
+STATUS_AVAILABLE = 9
+STATUS_DEALT = 11
+STATUS_INIT = 12
+STATUS_DISABLED = 13
+SERVICES_TABLE_TYPE = 14
+ALIASES_TABLE_TYPE = 15
+IMPORTS_TABLE_TYPE = 16
 
 
 ####################################################################################

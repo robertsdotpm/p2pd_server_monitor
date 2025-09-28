@@ -17,6 +17,7 @@ async def insert_main():
     async with aiosqlite.connect(DB_NAME) as db:
         db.row_factory = aiosqlite.Row
 
+        await delete_all_data(db)
         for file_name in file_names:
             af = IP4 if "v4" in file_name else IP6
             import_type = None
@@ -54,6 +55,8 @@ async def insert_main():
                         password=None,
                         fqn=None
                     )
+
+                    await db.commit()
 
                     print("import id = ", import_id)
 

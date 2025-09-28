@@ -85,32 +85,30 @@ async def insert_import(db, import_type, af, ip, port, user=None, password=None,
     sql += "VALUES (?, ?, ?, ?, ?, ?, ?)"
     info = [import_type, af, ip, port, user, password, None]
     import_id = None
-    try:
-        async with db.execute("BEGIN"):
-            # Associate alias record with this insert.
-            if fqn:
-                try:
-                    # Update IP field.
-                    res = await async_res_domain_af(af, fqn)
-                    info[2] = res[1]
 
-                    alias_id = await fetch_or_insert_alias(db, af, fqn)
-                    info[-1] = alias_id
-                except:
-                    log_exception()
+    # Associate alias record with this insert.
+    if fqn:
+        try:
+            # Update IP field.
+            res = await async_res_domain_af(af, fqn)
+            info[2] = res[1]
 
-            async with await db.execute(sql, info) as cursor:
-                import_id = cursor.lastrowid
-                await init_status_row(
-                    db,
-                    cursor.lastrowid,
-                    IMPORTS_TABLE_TYPE
-                )
+            alias_id = await fetch_or_insert_alias(db, af, fqn)
+            info[-1] = alias_id
+        except:
+            log_exception()
 
-            await db.commit()
-            return import_id
-    except:
-        log_exception() 
+    async with db.execute(sql, info) as cursor:
+        import_id = cursor.lastrowid
+        await init_status_row(
+            db,
+            cursor.lastrowid,
+            IMPORTS_TABLE_TYPE
+        )
+
+        await db.commit()
+        return import_id
+
 
 async def insert_service(
     db,

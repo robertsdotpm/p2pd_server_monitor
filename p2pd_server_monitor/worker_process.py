@@ -55,4 +55,4 @@ async def worker_loop(nic=None):
 
 
 if __name__ == "__main__":
-    asyncio.run(worker_loop1())
+    asyncio.run(worker_loop())
