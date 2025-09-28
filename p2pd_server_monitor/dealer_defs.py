@@ -26,6 +26,7 @@ STATUS_DISABLED = 13
 SERVICES_TABLE_TYPE = 14
 ALIASES_TABLE_TYPE = 15
 IMPORTS_TABLE_TYPE = 16
+NO_WORK = -1
 
 
 ####################################################################################

@@ -36,8 +36,49 @@ from .txt_strs import *
 
 app = FastAPI(default_response_class=PrettyJSONResponse)
 
+server_cache = []
+refresh_task = None
+
+async def refresh_server_cache():
+    global server_cache
+    while True:
+        servers = {}
+        async with aiosqlite.connect(DB_NAME) as db:
+            db.row_factory = aiosqlite.Row
+
+            # Server listing per service type.
+            for service_type in SERVICE_TYPES:
+                per_type = servers[TXTS[service_type]] = {}
+                
+                # Sub-divided by transport support.
+                for proto in (UDP, TCP,):
+                    per_proto = per_type[TXTS["proto"][proto]] = {}
+
+                    # Then by address family supported.
+                    for af in VALID_AFS:
+                        sql = """
+                        SELECT *
+                        FROM service_quality
+                        WHERE type = ? 
+                        AND proto = ? 
+                        AND af = ?
+                        ORDER BY group_score DESC, service_id ASC;
+                        """
+                        params = (service_type, proto, af,)
+                        async with db.execute(sql, params) as cursor:
+                            rows = [dict(r) for r in await cursor.fetchall()]
+
+                        # Assign the list of groups to the nested structure
+                        per_af = per_proto[TXTS["af"][af]] = rows
+
+        if servers:
+            server_cache = servers
+            
+        await asyncio.sleep(60)
+
 @app.on_event("startup")
 async def main():
+    global refresh_task
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("PRAGMA journal_mode=WAL;")
         await db.execute("PRAGMA synchronous = 1;")
@@ -50,6 +91,8 @@ async def main():
             await db.commit()
         except:
             what_exception()
+    
+    refresh_task = asyncio.create_task(refresh_server_cache())
 
 def localhost_only(request: Request):
     client_host = request.client.host
@@ -186,36 +229,7 @@ async def insert_services(imports_list, status_id):
 # Only public API is this one.
 @app.get("/servers")
 async def list_servers():
-    servers = {}
-    async with aiosqlite.connect(DB_NAME) as db:
-        db.row_factory = aiosqlite.Row
-
-        # Server listing per service type.
-        for service_type in SERVICE_TYPES:
-            per_type = servers[TXTS[service_type]] = {}
-            
-            # Sub-divided by transport support.
-            for proto in (UDP, TCP,):
-                per_proto = per_type[TXTS["proto"][proto]] = {}
-
-                # Then by address family supported.
-                for af in VALID_AFS:
-                    sql = """
-                    SELECT *
-                    FROM service_quality
-                    WHERE type = ? 
-                    AND proto = ? 
-                    AND af = ?
-                    ORDER BY group_score DESC, service_id ASC;
-                    """
-                    params = (service_type, proto, af,)
-                    async with db.execute(sql, params) as cursor:
-                        rows = [dict(r) for r in await cursor.fetchall()]
-
-                    # Assign the list of groups to the nested structure
-                    per_af = per_proto[TXTS["af"][af]] = rows
-
-    return servers
+    return server_cache
 
 if __name__ == "__main__":
     uvicorn.run(

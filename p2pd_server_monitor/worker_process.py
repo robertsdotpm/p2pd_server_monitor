@@ -12,7 +12,7 @@ async def worker(nic, curl, init_work=None):
         work = init_work or (await fetch_work_list(curl))
         if not len(work):
             print("No work found")
-            return 0
+            return -1
 
         is_success = status_ids = []
         table_type = work[0]["table_type"]
@@ -76,13 +76,16 @@ async def worker_loop(nic=None):
         except asyncio.TimeoutError:
             is_success = 0
 
-        if not is_success:
+        if is_success == NO_WORK:
             # Random stagger period before retry.
             # This avoids every worker hitting the server at once.
             # It also distributes work evenly over time.
             n = random.randrange(1, MONITOR_FREQUENCY)
             print("Sleeping until next try in secs: ", n)
             await asyncio.sleep(n)
+
+        # Avoid DoS in event of error.
+        await asyncio.sleep(0.1)
         
 if __name__ == "__main__":
     asyncio.run(worker_loop())
