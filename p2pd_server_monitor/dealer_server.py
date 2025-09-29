@@ -7,6 +7,10 @@ Priority:
     -- merge and publish
 
 future:
+    -- I think it would be highly worthwhile to find a way to convert IPs back to
+    DNS names. This would make it easier to keep servers updated.
+        -- reverse dns?
+        
     -- technically A and AAA dns can map to a list of IPs so my data structure for
     aliases are wrong but lets roll with it to start with since its simple.
     -- some servers have additional meta data like even PNP has oub keys and turn
@@ -73,7 +77,7 @@ async def refresh_server_cache():
 
         if servers:
             server_cache = servers
-            
+
         await asyncio.sleep(60)
 
 @app.on_event("startup")
@@ -207,11 +211,14 @@ async def insert_services(imports_list, status_id):
                     service["db"] = db
                     if service["alias_id"]:
                         alias_count += 1
+                        
                     await insert_service(**service)
 
                 # STUN change servers should have all or no alias.
                 if services[0]["service_type"] == STUN_CHANGE_TYPE:
-                    assert(alias_count in (0, 4,))
+                    print("alias count = ", alias_count)
+                    if alias_count not in (0, 4,):
+                        raise Exception("STUN change servers need even aliases")
 
             # Only allocate imports work once.
             # This deletes the associated status record. 

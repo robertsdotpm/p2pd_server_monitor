@@ -498,4 +498,76 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
     async def test_concurrent_workers_vs_locking_issues(self):
         pass
 
+    async def test_alias_created_for_import(self):
+        fqn = "stun.gmx.de"
+
+        """
+        res = await async_res_domain_af(IP4, fqn)
+        assert(res
+        alias_id = await fetch_or_insert_alias(self.db, IP4, fqn)
+        assert(alias_id)
+        """
+        import_id = await insert_import(
+            db=self.db,
+            import_type=STUN_MAP_TYPE,
+            af=IP4,
+            ip="212.227.67.33",
+            port=3478,
+            fqn=fqn,
+        )
+
+        assert(import_id)
+
+        sql = "SELECT * FROM aliases"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            rows = [dict(row) for row in rows]
+            assert(rows[0]["ip"])
+            print(rows)
+
+        sql = "SELECT * FROM imports"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            rows = [dict(row) for row in rows]
+            assert(rows[0]["alias_id"])
+            print(rows)
+
+        sql = "SELECT * FROM status"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            rows = [dict(row) for row in rows]
+            print(rows)
+
+        print()
+        print()
+
+        # ^ should have two status rows.
+        # Got to check its allocated as work.
+        work_list = []
+        work = await get_work()
+        print(work)
+        work_list.append(work[0])
+
+        work = await get_work()
+        print(work)
+        work_list.append(work[0])
+
+        # check worker process can handle alias work.
+        alias_work = None
+        for work in work_list:
+            if work["table_type"] == ALIASES_TABLE_TYPE:
+                alias_work = work
+                break
+
+        
+
+        # check imports monitor can handle alias work.
+        route = self.nic.route(IP4)
+        print(route)
+        curl = WebCurl(("8.8.8.8", 80,), route)
+        await worker(self.nic, curl, init_work=[alias_work])
+
+        
+
+
     # TODO: some test cases for concurrency issues.

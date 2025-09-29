@@ -1,6 +1,6 @@
 #!/bin/bash
 
-n="${MONITOR_WORKER_NO:-5}"
+n="${MONITOR_WORKER_NO:-20}"
 
 echo "Starting dealer server"
 python3 -m p2pd_server_monitor.dealer_server --log_path=dealer.log --py_p2pd_monitor &

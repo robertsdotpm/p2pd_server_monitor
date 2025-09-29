@@ -96,7 +96,8 @@ async def monitor_ntp_type(nic, work):
         return 0, [work[0]["status_id"]]
 
 async def service_monitor(nic, work):
-    is_success = status_ids = []
+    is_success = 0
+    status_ids = []
     work_type = work[0]["type"]
 
     if len(work) == 1:
@@ -143,6 +144,10 @@ async def imports_monitor(curl, pending_insert):
             })
 
         imports_list.append(services)
+
+    # Nothing to import.
+    if not imports_list:
+        return 0, []
 
     # Ensure status rows are updated even if nothing to import.
     await curl.vars({

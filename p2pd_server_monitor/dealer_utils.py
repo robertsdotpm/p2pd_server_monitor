@@ -41,10 +41,10 @@ async def load_status_row(db, status_id):
         row = await cursor.fetchone()
         return dict(row) if row else None
 
-async def record_alias(db, af, fqn):
-    sql = "INSERT into aliases (af, fqn) VALUES (?, ?)"
+async def record_alias(db, af, fqn, ip=None):
+    sql = "INSERT into aliases (af, fqn, ip) VALUES (?, ?, ?)"
     alias_id = None
-    async with await db.execute(sql, (af, fqn,)) as cursor:
+    async with await db.execute(sql, (af, fqn, ip,)) as cursor:
         alias_id = cursor.lastrowid
 
     await init_status_row(
@@ -64,14 +64,14 @@ async def load_alias_row(db, alias_id):
 
     return None
 
-async def fetch_or_insert_alias(db, af, fqn):
+async def fetch_or_insert_alias(db, af, fqn, ip=None):
     sql = "SELECT * FROM aliases WHERE af=? AND fqn=?"
     async with db.execute(sql, (af, fqn,)) as cursor:
         rows = await cursor.fetchone()
         if rows:
             return dict(rows)["id"]
 
-    return await record_alias(db, af, fqn)
+    return await record_alias(db, af, fqn, ip)
 
 async def get_new_group_id(db):
     # Insert a dummy row and get its id atomically
@@ -90,14 +90,16 @@ async def insert_import(db, import_type, af, ip, port, user=None, password=None,
     if fqn:
         try:
             # Update IP field.
-            res = await async_res_domain_af(af, fqn)
-            info[2] = res[1]
-
-            alias_id = await fetch_or_insert_alias(db, af, fqn)
+            _, res_ip = await async_res_domain_af(af, fqn)
+            info[2] = res_ip
+            
+            alias_id = await fetch_or_insert_alias(db, af, fqn, ip=res_ip)
             info[-1] = alias_id
         except:
+            log("Fqn error for %s" % (fqn,))
             log_exception()
 
+    print("Inserting import: ", info)
     async with db.execute(sql, info) as cursor:
         import_id = cursor.lastrowid
         await init_status_row(
@@ -130,6 +132,10 @@ async def insert_service(
         alias_row = await load_alias_row(db, alias_id)
         if not alias_row:
             raise Exception("Alias ID does not exist.")
+
+        # Disable aliases for STUN change servers.
+        if service_type == STUN_CHANGE_TYPE:
+            alias_id = None
 
     # SQL statement for insert into services.
     sql  = """

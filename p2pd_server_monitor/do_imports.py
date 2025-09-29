@@ -44,6 +44,10 @@ async def insert_main():
                     parts = line.split(",")
                     ip = parts[0]
                     port = parts[1]
+                    fqn = None
+                    if len(parts) > 2:
+                        fqn = parts[2]
+                        print("Trying fqn = ", fqn)
 
                     import_id = await insert_import(
                         db,
@@ -53,7 +57,7 @@ async def insert_main():
                         port=int(port),
                         user=None,
                         password=None,
-                        fqn=None
+                        fqn=fqn
                     )
 
                     await db.commit()
