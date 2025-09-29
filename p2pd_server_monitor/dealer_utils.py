@@ -99,7 +99,6 @@ async def insert_import(db, import_type, af, ip, port, user=None, password=None,
             log("Fqn error for %s" % (fqn,))
             log_exception()
 
-    print("Inserting import: ", info)
     async with db.execute(sql, info) as cursor:
         import_id = cursor.lastrowid
         await init_status_row(

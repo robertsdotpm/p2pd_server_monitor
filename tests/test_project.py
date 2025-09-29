@@ -378,7 +378,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_worker_loop_exception_should_continue(self):
-        is_success = await worker(self.nic, None)
+        is_success, _ = await worker(self.nic, None)
         assert(not is_success)
 
     async def test_status_should_be_created_on_new_alias(self):
@@ -523,50 +523,72 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             rows = await cursor.fetchall()
             rows = [dict(row) for row in rows]
             assert(rows[0]["ip"])
-            print(rows)
 
         sql = "SELECT * FROM imports"
         async with self.db.execute(sql) as cursor:
             rows = await cursor.fetchall()
             rows = [dict(row) for row in rows]
             assert(rows[0]["alias_id"])
-            print(rows)
 
         sql = "SELECT * FROM status"
         async with self.db.execute(sql) as cursor:
             rows = await cursor.fetchall()
             rows = [dict(row) for row in rows]
-            print(rows)
-
-        print()
-        print()
 
         # ^ should have two status rows.
         # Got to check its allocated as work.
         work_list = []
         work = await get_work()
-        print(work)
         work_list.append(work[0])
 
         work = await get_work()
-        print(work)
         work_list.append(work[0])
 
         # check worker process can handle alias work.
         alias_work = None
+        import_work = None
         for work in work_list:
             if work["table_type"] == ALIASES_TABLE_TYPE:
                 alias_work = work
-                break
+            else:
+                import_work = work
 
-        
+        # Not exactly the same as the process worker doing it with a web call.
+        service = {
+            "service_type": import_work["type"],
+            "af": import_work["af"],
+            "proto": int(UDP),
+            "ip": import_work["ip"],
+            "port": import_work["port"],
+            "user": import_work["user"],
+            "password": import_work["pass"],
+            "alias_id": alias_work["id"]
+        }
+
+        await insert_services(str([[service]]), import_work["id"])
 
         # check imports monitor can handle alias work.
         route = self.nic.route(IP4)
-        print(route)
         curl = WebCurl(("8.8.8.8", 80,), route)
-        await worker(self.nic, curl, init_work=[alias_work])
+        is_success, status_ids = await worker(self.nic, curl, init_work=[alias_work])
 
+        # Simulate an API update from a worker.
+        sim_ip = "9.1.2.3"
+        await update_alias(alias_work["id"], sim_ip)
+
+        # Check the import changed.
+        sql = "SELECT * FROM imports"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            rows = [dict(row) for row in rows]
+            assert(rows[0]["ip"] == sim_ip)
+
+        # Check services changes.
+        sql = "SELECT * FROM services"
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            rows = [dict(row) for row in rows]
+            assert(rows[0]["ip"] == sim_ip)
         
 
 

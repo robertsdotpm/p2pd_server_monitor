@@ -145,26 +145,34 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
 # Worker processes check in to signal status of work.
 @app.get("/complete", dependencies=[Depends(localhost_only)])
 async def signal_complete_work(statuses):
-    # Convert dict string back to Python.
-    statuses = ast.literal_eval(statuses)
+
+    print("Received statuses: ", statuses)
 
     # Return list of updated status IDs.
     results = []
-    async with aiosqlite.connect(DB_NAME) as db:
-        db.row_factory = aiosqlite.Row
+    try:
+        # Convert dict string back to Python.
+        statuses = ast.literal_eval(statuses)
 
-        # Split into a function so it can be using inside a transaction
-        # by the imports method (doesn't call commit on its own.)
-        async with db.execute("BEGIN"):
-            for status_info in statuses:
-                status_info["db"] = db
-                ret = await mark_complete(**status_info)
-                results.append(ret)
+        async with aiosqlite.connect(DB_NAME) as db:
+            db.row_factory = aiosqlite.Row
 
-            # Save all changes as atomic TX.
-            await db.commit()
+            # Split into a function so it can be using inside a transaction
+            # by the imports method (doesn't call commit on its own.)
+            async with db.execute("BEGIN"):
+                for status_info in statuses:
+                    status_info["db"] = db
+                    ret = await mark_complete(**status_info)
+                    results.append(ret)
 
-    return results 
+                # Save all changes as atomic TX.
+                await db.commit()
+    except:
+        what_exception()
+        return results
+
+    print("returning out")
+    return results
 
 @app.get("/alias", dependencies=[Depends(localhost_only)])
 async def update_alias(alias_id: int, ip: str):
@@ -216,7 +224,6 @@ async def insert_services(imports_list, status_id):
 
                 # STUN change servers should have all or no alias.
                 if services[0]["service_type"] == STUN_CHANGE_TYPE:
-                    print("alias count = ", alias_count)
                     if alias_count not in (0, 4,):
                         raise Exception("STUN change servers need even aliases")
 

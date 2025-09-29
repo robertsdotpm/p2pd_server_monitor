@@ -37,7 +37,7 @@ async def worker(nic, curl, init_work=None):
         work = init_work or (await fetch_work_list(curl))
         if not len(work):
             print("No work found")
-            return NO_WORK
+            return NO_WORK, []
 
         is_success = status_ids = []
         table_type = work[0]["table_type"]
@@ -80,11 +80,12 @@ async def worker(nic, curl, init_work=None):
 
         await update_work_status(curl, status_ids, is_success)
         #await curl.vars().get("/freshdb")
-        return 1
+        print("Work status updated.")
+        return 1, status_ids
     except:
         what_exception()
         log_exception()
-        return 0
+        return 0, []
 
 async def worker_loop(nic=None):
     print("Loading interface...")
@@ -96,7 +97,7 @@ async def worker_loop(nic=None):
     curl = WebCurl(endpoint, route)
     while 1:
         try:
-            is_success = await asyncio.wait_for(
+            is_success, status_ids = await asyncio.wait_for(
                 worker(nic, curl), timeout=6
             )
         except asyncio.TimeoutError:
@@ -112,6 +113,8 @@ async def worker_loop(nic=None):
 
         # Avoid DoS in event of error.
         await asyncio.sleep(0.1)
+
+    await asyncio.sleep(2)
         
 if __name__ == "__main__":
     asyncio.run(worker_loop())
