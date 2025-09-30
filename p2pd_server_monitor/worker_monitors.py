@@ -161,10 +161,10 @@ async def imports_monitor(curl, pending_insert):
 async def alias_monitor(curl, alias):
     nic = curl.route.interface
     addr = await Address(alias[0]["fqn"], 80, nic)
-    ip = addr.select_ip(alias[0]["af"]).ip
-    if ip:
+    try:
+        ip = addr.select_ip(alias[0]["af"]).ip
         params = {"alias_id": alias[0]["row_id"], "ip": ip}
         await curl.vars(params).get("/alias")
         return 1, [alias[0]["status_id"]]
-    else:
-        return 0, []
+    except:
+        return 0, [alias[0]["status_id"]]

@@ -39,6 +39,7 @@ edge case:
     existing records
     -- time work and sleep if its too fast -- theres locking errors on aliases rn
     since the work finishes too fast
+    -- inital /server results some have quality score set to 0
 """
 
 import uvicorn

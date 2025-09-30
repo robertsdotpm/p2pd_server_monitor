@@ -70,13 +70,10 @@ async def worker(nic, curl, init_work=None, table_type=None):
         
         if table_type == ALIASES_TABLE_TYPE:
             is_success, status_ids = await alias_monitor(curl, work)
-            if not status_ids:
-                print("Error -- update IP from DNS name.")
+            if is_success:
+                print("Resolved -- updating IPs", status_ids)
             else:
-                if is_success:
-                    print("Resolved -- updating IPs", status_ids)
-                else:
-                    print("No IP found for DNS -- not updating ", status_ids)
+                print("No IP found for DNS -- not updating ", status_ids)
 
         await update_work_status(curl, status_ids, is_success)
         #await curl.vars().get("/freshdb")

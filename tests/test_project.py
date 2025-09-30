@@ -510,21 +510,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             rows = await cursor.fetchall()
             assert(not len(rows))   
 
-    async def test_monitor_turn_type_with_wrong_credentials(self):
-        # Pass wrong user/pass to monitor_turn_type and assert failure
-        pass
-
-    async def test_alias_monitor_with_unresolvable_fqn(self):
-        return
-        
-        # Pass an unresolvable FQN and assert failure
-        route = self.nic.route(IP4)
-        curl = WebCurl(("example.com", 80), route)
-        ret = await alias_monitor(curl, alias)
-    
-    async def test_concurrent_workers_vs_locking_issues(self):
-        pass
-
     async def test_alias_created_for_import(self):
         fqn = "stun.gmx.de"
         import_id = await insert_import(
@@ -636,3 +621,18 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
     # Then test that can be done multiple times.
     async def test_systemctl_cleans_out_work_queue_multiple_times(self):
         pass
+
+    async def test_server_list_has_quality_score_set(self):
+        pass
+
+    async def test_monitor_turn_type_with_wrong_credentials(self):
+        # Pass wrong user/pass to monitor_turn_type and assert failure
+        pass
+
+    async def test_alias_monitor_with_unresolvable_fqn_returns_status_ids(self):
+        return
+        
+        # Pass an unresolvable FQN and assert failure
+        route = self.nic.route(IP4)
+        curl = WebCurl(("example.com", 80), route)
+        ret = await alias_monitor(curl, alias)
