@@ -27,6 +27,12 @@ edge case:
     maybe i should cache this somehow
 
     figure out how to get stdout for worker processes logged
+
+    could make a change to work allocat1on to force complet1on of
+    al1as work f1rst before hand1ng out 1mports or serv1ce work. then
+    just remove the al1as resolv stuff before 1mports.
+        -- move it to the clients -- make it choose alias work, keep looping until
+        no work, then sleep for N, before resuming regular work (no specification)
 """
 
 import uvicorn
@@ -107,12 +113,18 @@ def localhost_only(request: Request):
 
 # Hands out work (servers to check) to worker processes.
 @app.get("/work", dependencies=[Depends(localhost_only)])
-async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY):
+async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY, table_type=None):
     # Indicate IPv4 / 6 support of worker process.
     if stack_type == DUEL_STACK:
         need_af = "%"
     else:
         need_af = stack_type if stack_type in VALID_AFS else "%"
+
+    # Set table type.
+    if table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE, ALIASES_TABLE_TYPE,):
+        table_type = table_type
+    else:
+        table_type = "%"
 
     # Connect to DB and find some work.
     async with aiosqlite.connect(DB_NAME) as db:
@@ -120,8 +132,13 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
 
         async with db.execute("BEGIN IMMEDIATE"):
             # Fetch all status rows, oldest first
-            sql = "SELECT * FROM status WHERE status != ? ORDER BY last_status ASC"
-            async with db.execute(sql, (STATUS_DISABLED,)) as cursor:
+            sql  = """
+            SELECT * FROM status WHERE
+                status != ? AND table_type LIKE ? 
+            ORDER BY last_status ASC"
+            """
+
+            async with db.execute(sql, (STATUS_DISABLED, table_type,)) as cursor:
                 status_entries = [dict(r) for r in await cursor.fetchall()]
 
             # Get a group of service(s), aliases, or imports.
@@ -173,7 +190,6 @@ async def signal_complete_work(statuses):
 async def update_alias(alias_id, ip, current_time=None):
     ip = ensure_ip_is_public(ip)
     current_time = current_time or int(time.time())
-    params = (ip, alias_id, current_time, MAX_SERVER_DOWNTIME * 2,)
 
     async with aiosqlite.connect(DB_NAME) as db:
         async with db.execute("BEGIN"):
@@ -181,31 +197,16 @@ async def update_alias(alias_id, ip, current_time=None):
             alias_sql = "UPDATE aliases SET ip = ? WHERE id = ?"
             await db.execute(alias_sql, (ip, alias_id,))
 
-            # Every record pointing to the alias also update their IP.
+            # Only update IPs if there's a timeout for a while.
             for table_name in ("imports", "services"):
-                main_sql = f"""
-                UPDATE {table_name} SET ip = ?
-                WHERE alias_id = ?
-                AND EXISTS (
-                    SELECT 1
-                    FROM status
-                    WHERE status.row_id = {table_name}.id
-                    AND status.status != {STATUS_DISABLED}
-                    AND (
-                        (
-                            status.last_success = 0
-                            AND status.last_uptime = 0
-                            AND status.test_no >= 2
-                        )
-                        OR
-                        (
-                            status.last_success != 0
-                            AND (? - status.last_uptime) > ?
-                        )
-                    )
-                );
-                """
-                await db.execute(main_sql, params)
+                await update_table_ip(
+                    db,
+                    table_name,
+                    ip,
+                    alias_id,
+                    current_time,
+                )
+
 
             await db.commit()
 

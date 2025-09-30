@@ -90,12 +90,7 @@ async def insert_import(db, import_type, af, ip, port, user=None, password=None,
     # Associate alias record with this insert.
     if fqn:
         try:
-            # Update IP field.
-            _, res_ip = await async_res_domain_af(af, fqn)
-            ensure_ip_is_public(res_ip)
-            info[2] = res_ip
-            
-            alias_id = await fetch_or_insert_alias(db, af, fqn, ip=res_ip)
+            alias_id = await fetch_or_insert_alias(db, af, fqn)
             info[-1] = alias_id
         except:
             log("Fqn error for %s" % (fqn,))
@@ -159,3 +154,29 @@ async def insert_service(
 
     return [status_id, insert_id]
 
+async def update_table_ip(db, table_name, ip, alias_id, current_time):
+    sql = f"""
+    UPDATE {table_name}
+    SET ip = ?
+    WHERE alias_id = ?
+      AND EXISTS (
+          SELECT 1
+          FROM status
+          WHERE status.row_id = {table_name}.id
+            AND status.status != {STATUS_DISABLED}
+            AND (
+                (
+                    status.last_success = 0
+                    AND status.last_uptime = 0
+                    AND status.test_no >= 2
+                )
+                OR
+                (
+                    status.last_success != 0
+                    AND (? - status.last_uptime) > ?
+                )
+            )
+      );
+    """
+    params = (ip, alias_id, current_time, MAX_SERVER_DOWNTIME * 2,)
+    await db.execute(sql, params)

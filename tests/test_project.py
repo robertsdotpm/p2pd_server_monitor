@@ -542,7 +542,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         async with self.db.execute(sql) as cursor:
             rows = await cursor.fetchall()
             rows = [dict(row) for row in rows]
-            assert(rows[0]["ip"])
 
         sql = "SELECT * FROM imports"
         async with self.db.execute(sql) as cursor:
