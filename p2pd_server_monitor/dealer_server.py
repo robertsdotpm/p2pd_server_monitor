@@ -33,6 +33,12 @@ edge case:
     just remove the al1as resolv stuff before 1mports.
         -- move it to the clients -- make it choose alias work, keep looping until
         no work, then sleep for N, before resuming regular work (no specification)
+
+    -- theres no port in the server results
+    -- make it so you can run do_imports multiple times and it wont interfer with
+    existing records
+    -- time work and sleep if its too fast -- theres locking errors on aliases rn
+    since the work finishes too fast
 """
 
 import uvicorn

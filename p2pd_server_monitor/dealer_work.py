@@ -124,22 +124,11 @@ async def mark_complete(db, is_success, status_id, t):
         sql = """
         UPDATE status
         SET
-            -- Start counting if this is the first success.
-            -- Otherwise increment it based on the starting timestamp.
-            uptime = uptime + CASE 
-                WHEN last_uptime = 0 
-                THEN 0 
-                ELSE (? - last_uptime) 
+            uptime = uptime + CASE
+                WHEN last_uptime = 0 THEN 0
+                ELSE (? - last_uptime)
             END,
-
-            -- Don't update last_uptime if it's already set.
-            last_uptime = CASE 
-                WHEN last_uptime = 0 
-                THEN ? 
-                ELSE last_uptime 
-            END,
-
-
+            last_uptime = ?,
             test_no = test_no + 1,
             status = ?,
             last_status = ?,

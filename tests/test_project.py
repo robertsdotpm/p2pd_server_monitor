@@ -629,4 +629,10 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             rows = [dict(row) for row in rows]
             assert(rows[0]["ip"] == sim_ip)
 
-    # TODO: some test cases for concurrency issues.
+    async def test_successive_success_should_increase_uptime(self):
+        pass
+
+    # All work should end up being allocated, processed, then made available.
+    # Then test that can be done multiple times.
+    async def test_systemctl_cleans_out_work_queue_multiple_times(self):
+        pass
