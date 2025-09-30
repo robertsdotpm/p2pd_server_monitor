@@ -40,28 +40,31 @@ async def insert_main():
             with open(file_path, "r") as f:
                 lines = f.readlines()
                 for line in lines:
-                    line = line.strip()
-                    parts = line.split(",")
-                    ip = parts[0]
-                    port = parts[1]
-                    fqn = None
-                    if len(parts) > 2:
-                        fqn = parts[2]
-                        print("Trying fqn = ", fqn)
+                    try:
+                        line = line.strip()
+                        parts = line.split(",")
+                        ip = parts[0]
+                        port = parts[1]
+                        fqn = None
+                        if len(parts) > 2:
+                            fqn = parts[2]
+                            print("Trying fqn = ", fqn)
 
-                    import_id = await insert_import(
-                        db,
-                        import_type=import_type,
-                        af=af,
-                        ip=ip,
-                        port=int(port),
-                        user=None,
-                        password=None,
-                        fqn=fqn
-                    )
+                        import_id = await insert_import(
+                            db,
+                            import_type=import_type,
+                            af=af,
+                            ip=ip,
+                            port=int(port),
+                            user=None,
+                            password=None,
+                            fqn=fqn
+                        )
 
-                    await db.commit()
+                        await db.commit()
 
-                    print("import id = ", import_id)
+                        print("import id = ", import_id)
+                    except:
+                        what_exception()
 
 asyncio.run(insert_main())

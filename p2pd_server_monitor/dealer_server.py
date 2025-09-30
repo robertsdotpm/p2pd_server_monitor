@@ -22,6 +22,11 @@ future:
 edge case:
     - negative uptimes possible if time manually set in the past but this is
     still useful for tests and these APIs wont be public
+
+    having to load all the dns names before imports for IPs is very slow
+    maybe i should cache this somehow
+
+    figure out how to get stdout for worker processes logged
 """
 
 import uvicorn
@@ -147,7 +152,6 @@ async def signal_complete_work(statuses):
 
     # Convert dict string back to Python.
     statuses = ast.literal_eval(statuses)
-    #print(statuses)
 
     async with aiosqlite.connect(DB_NAME) as db:
         db.row_factory = aiosqlite.Row

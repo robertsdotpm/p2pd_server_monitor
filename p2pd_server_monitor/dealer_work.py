@@ -106,7 +106,6 @@ async def mark_complete(db, is_success, status_id, t):
         # Load status row to check it exists.
         row = await load_status_row(db, status_id)
         if row is None:
-            print("could not load status row %s" % (status_id,))
             raise Exception("could not load status row %s" % (status_id,))
 
         # Delete target row if status is for an imports.

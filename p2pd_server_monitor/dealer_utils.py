@@ -80,7 +80,8 @@ async def get_new_group_id(db):
         return cursor.lastrowid
 
 async def insert_import(db, import_type, af, ip, port, user=None, password=None, fqn=None):
-    ip = ensure_ip_is_public(ip)
+    if ip not in ("", "0"):
+        ip = ensure_ip_is_public(ip)
     sql  = "INSERT INTO imports (type, af, ip, port, user, pass, alias_id) "
     sql += "VALUES (?, ?, ?, ?, ?, ?, ?)"
     info = [import_type, af, ip, port, user, password, None]
