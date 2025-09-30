@@ -7,10 +7,6 @@ Priority:
     -- merge and publish
 
 future:
-    -- I think it would be highly worthwhile to find a way to convert IPs back to
-    DNS names. This would make it easier to keep servers updated.
-        -- reverse dns?
-        
     -- technically A and AAA dns can map to a list of IPs so my data structure for
     aliases are wrong but lets roll with it to start with since its simple.
     -- some servers have additional meta data like even PNP has oub keys and turn
@@ -78,6 +74,7 @@ async def refresh_server_cache():
         if servers:
             server_cache = servers
 
+        server_cache["last_refresh"] = int(time.time())
         await asyncio.sleep(60)
 
 @app.on_event("startup")
@@ -145,48 +142,66 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
 # Worker processes check in to signal status of work.
 @app.get("/complete", dependencies=[Depends(localhost_only)])
 async def signal_complete_work(statuses):
-
-    print("Received statuses: ", statuses)
-
     # Return list of updated status IDs.
     results = []
-    try:
-        # Convert dict string back to Python.
-        statuses = ast.literal_eval(statuses)
 
-        async with aiosqlite.connect(DB_NAME) as db:
-            db.row_factory = aiosqlite.Row
+    # Convert dict string back to Python.
+    statuses = ast.literal_eval(statuses)
+    #print(statuses)
 
-            # Split into a function so it can be using inside a transaction
-            # by the imports method (doesn't call commit on its own.)
-            async with db.execute("BEGIN"):
-                for status_info in statuses:
-                    status_info["db"] = db
-                    ret = await mark_complete(**status_info)
-                    results.append(ret)
+    async with aiosqlite.connect(DB_NAME) as db:
+        db.row_factory = aiosqlite.Row
 
-                # Save all changes as atomic TX.
-                await db.commit()
-    except:
-        what_exception()
-        return results
+        # Split into a function so it can be using inside a transaction
+        # by the imports method (doesn't call commit on its own.)
+        async with db.execute("BEGIN"):
+            for status_info in statuses:
+                status_info["db"] = db
+                ret = await mark_complete(**status_info)
+                results.append(ret)
 
-    print("returning out")
+            # Save all changes as atomic TX.
+            await db.commit()
+
     return results
 
 @app.get("/alias", dependencies=[Depends(localhost_only)])
-async def update_alias(alias_id: int, ip: str):
+async def update_alias(alias_id, ip, current_time=None):
     ip = ensure_ip_is_public(ip)
+    current_time = current_time or int(time.time())
+    params = (ip, alias_id, current_time, MAX_SERVER_DOWNTIME * 2,)
+
     async with aiosqlite.connect(DB_NAME) as db:
         async with db.execute("BEGIN"):
             # Update IP for the alias entry.
-            sql = "UPDATE aliases SET ip = ? WHERE id = ?"
-            await db.execute(sql, (ip, alias_id,))
+            alias_sql = "UPDATE aliases SET ip = ? WHERE id = ?"
+            await db.execute(alias_sql, (ip, alias_id,))
 
             # Every record pointing to the alias also update their IP.
             for table_name in ("imports", "services"):
-                sql = f"UPDATE {table_name} SET ip = ? WHERE alias_id = ?"
-                await db.execute(sql, (ip, alias_id,))
+                main_sql = f"""
+                UPDATE {table_name} SET ip = ?
+                WHERE alias_id = ?
+                AND EXISTS (
+                    SELECT 1
+                    FROM status
+                    WHERE status.row_id = {table_name}.id
+                    AND status.status != {STATUS_DISABLED}
+                    AND (
+                        (
+                            status.last_success = 0
+                            AND status.last_uptime = 0
+                            AND status.test_no >= 2
+                        )
+                        OR
+                        (
+                            status.last_success != 0
+                            AND (? - status.last_uptime) > ?
+                        )
+                    )
+                );
+                """
+                await db.execute(main_sql, params)
 
             await db.commit()
 

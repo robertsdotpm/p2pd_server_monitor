@@ -91,6 +91,7 @@ async def insert_import(db, import_type, af, ip, port, user=None, password=None,
         try:
             # Update IP field.
             _, res_ip = await async_res_domain_af(af, fqn)
+            ensure_ip_is_public(res_ip)
             info[2] = res_ip
             
             alias_id = await fetch_or_insert_alias(db, af, fqn, ip=res_ip)

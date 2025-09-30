@@ -193,7 +193,7 @@ async def update_work_status(curl, status_ids, is_success):
 
     if len(statuses):
         out = await curl.vars({"statuses": statuses}).get("/complete")
-        print(out.out)
+        #print(out.out)
 
 async def validate_service_import(nic, pending_insert, service_monitor):
     import_list = []

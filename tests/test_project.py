@@ -87,9 +87,36 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         alias_id = await fetch_or_insert_alias(self.db, int(IP4), fqn)
         await self.db.commit()
 
+        for table_name in ("imports", "aliases", "services"):
+            sql = f"SELECT * FROM {table_name}"
+            async with self.db.execute(sql) as cursor:
+                rows = await cursor.fetchall()
+                rows = [dict(row) for row in rows]
+                for row in rows:
+                    assert(row["ip"] != dns_a)
+
+        sql = "SELECT * FROM status"
+        status_ids = []
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            rows = [dict(row) for row in rows]
+            for row in rows:
+                status_ids.append(row["id"])
+
+        # Simulate 2 failed checks to ensure downtime > MAX_SERVER_DOWNTIME.
+        for i in range(2, 4):
+            for status_id in status_ids:
+                outcome = {
+                    "is_success": 0,
+                    "status_id": int(status_id),
+                    "t": int(time.time()) + i
+                }
+
+                await signal_complete_work(str([outcome]))
+
         await update_alias(alias_id, dns_a)
 
-        for table_name in ("imports", "aliases", "services"):
+        for table_name in ("aliases", "services"):
             sql = f"SELECT * FROM {table_name}"
             async with self.db.execute(sql) as cursor:
                 rows = await cursor.fetchall()
@@ -500,13 +527,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
     async def test_alias_created_for_import(self):
         fqn = "stun.gmx.de"
-
-        """
-        res = await async_res_domain_af(IP4, fqn)
-        assert(res
-        alias_id = await fetch_or_insert_alias(self.db, IP4, fqn)
-        assert(alias_id)
-        """
         import_id = await insert_import(
             db=self.db,
             import_type=STUN_MAP_TYPE,
@@ -565,23 +585,43 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "alias_id": alias_work["id"]
         }
 
-        await insert_services(str([[service]]), import_work["id"])
+        await insert_services(str([[service]]), import_work["status_id"])
 
         # check imports monitor can handle alias work.
         route = self.nic.route(IP4)
         curl = WebCurl(("8.8.8.8", 80,), route)
         is_success, status_ids = await worker(self.nic, curl, init_work=[alias_work])
 
+        sql = "SELECT * FROM status"
+        status_ids = []
+        async with self.db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+            rows = [dict(row) for row in rows]
+            for row in rows:
+                status_ids.append(row["id"])
+
+        # Simulate 2 failed checks to ensure downtime > MAX_SERVER_DOWNTIME.
+        for i in range(2, 4):
+            for status_id in status_ids:
+                outcome = {
+                    "is_success": 0,
+                    "status_id": int(status_id),
+                    "t": int(time.time()) + i
+                }
+
+                await signal_complete_work(str([outcome]))
+
         # Simulate an API update from a worker.
         sim_ip = "9.1.2.3"
-        await update_alias(alias_work["id"], sim_ip)
+        future_time = int(time.time()) + (MAX_SERVER_DOWNTIME * 3)
+        await update_alias(alias_work["id"], sim_ip, current_time=future_time)
 
-        # Check the import changed.
+        # Imports are only done once so they should not have changed.
         sql = "SELECT * FROM imports"
         async with self.db.execute(sql) as cursor:
             rows = await cursor.fetchall()
             rows = [dict(row) for row in rows]
-            assert(rows[0]["ip"] == sim_ip)
+            assert(rows[0]["ip"] != sim_ip)
 
         # Check services changes.
         sql = "SELECT * FROM services"
@@ -589,7 +629,5 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             rows = await cursor.fetchall()
             rows = [dict(row) for row in rows]
             assert(rows[0]["ip"] == sim_ip)
-        
-
 
     # TODO: some test cases for concurrency issues.

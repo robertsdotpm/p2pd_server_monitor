@@ -101,18 +101,20 @@ async def claim_group(db, group_records, alloc_time):
 
 async def mark_complete(db, is_success, status_id, t):
     # Delete the associated imports row and status record.
+    status = STATUS_AVAILABLE
     try:
         # Load status row to check it exists.
         row = await load_status_row(db, status_id)
         if row is None:
-            raise Exception("could not load status row.")
+            print("could not load status row %s" % (status_id,))
+            raise Exception("could not load status row %s" % (status_id,))
 
         # Delete target row if status is for an imports.
         # We only want imports work to be done once.
         if row["table_type"] == IMPORTS_TABLE_TYPE:
+            status = STATUS_DISABLED
             sql = "UPDATE status SET status = ? WHERE id = ?"
             await db.execute(sql, (STATUS_DISABLED, status_id,))
-            return []
     except:
         # Can't load status so return.
         log_exception()
@@ -148,7 +150,7 @@ async def mark_complete(db, is_success, status_id, t):
         params = (
             t,  # uptime increment
             t,  # last_uptime reset if zero
-            STATUS_AVAILABLE,
+            status,
             t,  # last_status
             t,  # last_success
             status_id,
@@ -166,6 +168,6 @@ async def mark_complete(db, is_success, status_id, t):
             test_no = test_no + 1
         WHERE id = ?;
         """
-        await db.execute(sql, (STATUS_AVAILABLE, t, status_id))
+        await db.execute(sql, (status, t, status_id))
 
     return []
