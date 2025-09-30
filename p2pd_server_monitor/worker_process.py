@@ -31,10 +31,10 @@ if_info = {'id': 'eno1',
         }
 }
 
-async def worker(nic, curl, init_work=None):
+async def worker(nic, curl, init_work=None, table_type=None):
     try:
         # A single group of work, 1 or more grouped long.
-        work = init_work or (await fetch_work_list(curl))
+        work = init_work or (await fetch_work_list(curl, table_type))
         if not len(work):
             print("No work found")
             return NO_WORK, []
@@ -87,7 +87,28 @@ async def worker(nic, curl, init_work=None):
         log_exception()
         return 0, []
 
-async def worker_loop(nic=None):
+async def process_work(nic, curl, table_type=None, stagger=False):
+    while True:
+        try:
+            is_success, status_ids = await asyncio.wait_for(
+                worker(nic, curl, table_type=table_type),
+                timeout=6
+            )
+        except asyncio.TimeoutError:
+            is_success = 0
+
+        if is_success == NO_WORK:
+            if stagger:
+                n = random.randrange(1, MONITOR_FREQUENCY // 2)
+                print("Sleeping until next try in secs:", n)
+                await asyncio.sleep(n)
+            else:
+                break
+
+        # Avoid DoS in event of error.
+        await asyncio.sleep(0.1)
+
+async def main(nic=None):
     print("Loading interface...")
     nic = nic or Interface.from_dict(if_info)
     print("Interface loaded: ", nic)
@@ -95,26 +116,23 @@ async def worker_loop(nic=None):
     endpoint = ("127.0.0.1", 8000,)
     route = nic.route(IP4)
     curl = WebCurl(endpoint, route)
-    while 1:
-        try:
-            is_success, status_ids = await asyncio.wait_for(
-                worker(nic, curl), timeout=6
-            )
-        except asyncio.TimeoutError:
-            is_success = 0
 
-        if is_success == NO_WORK:
-            # Random stagger period before retry.
-            # This avoids every worker hitting the server at once.
-            # It also distributes work evenly over time.
-            n = random.randrange(1, MONITOR_FREQUENCY)
-            print("Sleeping until next try in secs: ", n)
-            await asyncio.sleep(n)
+    # Keep processing alias work until done.
+    # This allows for distributed DNS resolution for imports.
+    await process_work(
+        nic,
+        curl,
+        table_type=ALIASES_TABLE_TYPE
+    )
 
-        # Avoid DoS in event of error.
-        await asyncio.sleep(0.1)
+    # Give time for all DNS requests to finish.
+    await asyncio.sleep(3)
 
+    # Keep processing alias work until done.
+    await process_work(nic, curl, stagger=True)
+
+    # Give time for event loop to finish.
     await asyncio.sleep(2)
         
 if __name__ == "__main__":
-    asyncio.run(worker_loop())
+    asyncio.run(main())

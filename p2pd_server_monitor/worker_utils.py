@@ -162,11 +162,12 @@ async def validate_rfc3489_stun_server(af, proto, nic, primary_tup, secondary_tu
             cport=cport
         )
 
-async def fetch_work_list(curl):
+async def fetch_work_list(curl, table_type=None):
     nic = curl.route.interface
 
     # Fetch work from dealer server.
-    resp = await curl.vars({"stack_type": int(nic.stack)}).get("/work")
+    params = {"stack_type": int(nic.stack), "table_type": table_type}
+    resp = await curl.vars(params).get("/work")
     if resp.info is None:
         return []
     else:
