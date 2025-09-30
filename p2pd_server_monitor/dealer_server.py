@@ -135,7 +135,7 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
             sql  = """
             SELECT * FROM status WHERE
                 status != ? AND table_type LIKE ? 
-            ORDER BY last_status ASC"
+            ORDER BY last_status ASC
             """
 
             async with db.execute(sql, (STATUS_DISABLED, table_type,)) as cursor:
