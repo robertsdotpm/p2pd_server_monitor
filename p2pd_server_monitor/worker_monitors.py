@@ -13,11 +13,9 @@ async def monitor_stun_map_type(nic, work):
     )
 
     out = await client.get_wan_ip()
-    return 1, [work[0]["status_id"]]
+    return 1
 
 async def monitor_stun_change_type(nic, work):
-    status_ids = []
-
     # Validates the relationship between 4 stun servers.
     await validate_rfc3489_stun_server(
         work[0]["af"],
@@ -29,10 +27,7 @@ async def monitor_stun_change_type(nic, work):
         (work[2]["ip"], work[2]["port"], work[3]["port"],),
     )
 
-    for service in work:
-        status_ids.append(service["status_id"])
-
-    return 1, status_ids
+    return 1
 
 async def monitor_mqtt_type(nic, work):
     found_msg = asyncio.Queue()
@@ -61,9 +56,9 @@ async def monitor_mqtt_type(nic, work):
     # Wait for a reply.
     try:
         await asyncio.wait_for(found_msg.get(), 1.0)
-        return 1, [work[0]["status_id"]]
+        return 1
     except asyncio.TimeoutError:
-        return 0, [work[0]["status_id"]]
+        return 0
 
 async def monitor_turn_type(nic, work):
     user = "" if work[0]["user"] is None else work[0]["user"]
@@ -83,41 +78,40 @@ async def monitor_turn_type(nic, work):
         await client.close()
 
         if None not in (r_addr, r_relay):
-            return 1, [work[0]["status_id"]]
+            return 1
 
-    return 0, [work[0]["status_id"]]
+    return 0
 
 async def monitor_ntp_type(nic, work):
     work[0]["host"] = work[0]["ip"]
     resp = await get_ntp(nic, server=work[0])
     if resp:
-        return 1, [work[0]["status_id"]]
+        return 1
     else:
-        return 0, [work[0]["status_id"]]
+        return 0
 
 async def service_monitor(nic, work):
     is_success = 0
-    status_ids = []
     work_type = work[0]["type"]
 
     if len(work) == 1:
         if work_type == STUN_MAP_TYPE:
-            is_success, status_ids = await monitor_stun_map_type(nic, work)
+            is_success = await monitor_stun_map_type(nic, work)
 
         if work_type == MQTT_TYPE:
-            is_success, status_ids = await monitor_mqtt_type(nic, work)
+            is_success = await monitor_mqtt_type(nic, work)
 
         if work_type == TURN_TYPE:
-            is_success, status_ids = await monitor_turn_type(nic, work)
+            is_success = await monitor_turn_type(nic, work)
 
         if work_type == NTP_TYPE:
-            is_success, status_ids = await monitor_ntp_type(nic, work)
+            is_success = await monitor_ntp_type(nic, work)
 
     if len(work) == 4:
         if work_type == STUN_CHANGE_TYPE:
-            is_success, status_ids = await monitor_stun_change_type(nic, work)
+            is_success = await monitor_stun_change_type(nic, work)
     
-    return is_success, status_ids
+    return is_success
 
 async def imports_monitor(curl, pending_insert):
     nic = curl.route.interface
@@ -147,24 +141,25 @@ async def imports_monitor(curl, pending_insert):
 
     # Nothing to import.
     if not imports_list:
-        return 0, []
+        return 0
 
-    # Ensure status rows are updated even if nothing to import.
-    await curl.vars({
+    # Otherwise do imports.
+    params = {
         "imports_list": imports_list,
         "status_id": pending_insert[0]["status_id"],
-    }).get("/insert")
+    }
+    await retry_curl_on_locked(curl, params, "/insert")
 
     # Same return time but update status handled by /insert.
-    return 1, []
+    return 1
 
 async def alias_monitor(curl, alias):
     nic = curl.route.interface
-    addr = await Address(alias[0]["fqn"], 80, nic)
     try:
+        addr = await Address(alias[0]["fqn"], 80, nic)
         ip = addr.select_ip(alias[0]["af"]).ip
         params = {"alias_id": alias[0]["row_id"], "ip": ip}
-        await curl.vars(params).get("/alias")
-        return 1, [alias[0]["status_id"]]
+        await retry_curl_on_locked(curl, params, "/alias")
+        return 1
     except:
-        return 0, [alias[0]["status_id"]]
+        return 0

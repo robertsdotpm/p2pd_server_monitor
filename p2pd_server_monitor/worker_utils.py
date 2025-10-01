@@ -162,26 +162,59 @@ async def validate_rfc3489_stun_server(af, proto, nic, primary_tup, secondary_tu
             cport=cport
         )
 
+# Will just have workers wait until success.
+async def retry_curl_on_locked(curl, params, endpoint, retries=None):
+    while retries is None or retries > 0:
+        # Decrement sentinel.
+        if retries is not None:
+            retries -= 1
+
+        # Make the request.
+        out = await curl.vars(params).get(endpoint)
+
+        # Server down, try again.
+        if out.info is None:
+            await sleep_random()
+            continue
+
+        # Locked, try again.
+        if to_s(out.out) == "LOCKED":
+            await sleep_random()
+            continue
+
+        # Return output.
+        return out
+
 async def fetch_work_list(curl, table_type=None):
     nic = curl.route.interface
+    work = []
 
     # Fetch work from dealer server.
     params = {"stack_type": int(nic.stack), "table_type": table_type}
-    resp = await curl.vars(params).get("/work")
-    if resp.info is None:
-        return []
-    else:
+    resp = await retry_curl_on_locked(curl, params, "/work")
+
+    # Should not happen but check anyway.
+    if None in (resp.info, resp.out,):
+        log("No resp for /work")
+        return work
+
+    # Wrap in try except for safety:
+    # Server might return an unexpected response.
+    try:
         work = json.loads(to_s(resp.out))
+        f = lambda r: r["id"]
+        work = sorted(work, key=f)
+        for grouped in work:
+            if hasattr(grouped, "af"):
+                grouped["af"] = IP4 if grouped["af"] == 2 else IP6
 
-    f = lambda r: r["id"]
-    work = sorted(work, key=f)
-    for grouped in work:
-        if hasattr(grouped, "af"):
-            grouped["af"] = IP4 if grouped["af"] == 2 else IP6
+            if hasattr(grouped, "proto"):
+                grouped["proto"] = UDP if grouped["proto"] == 2 else TCP
+    except:
+        log("Could not process server resp as work " + to_s(resp.out))
+        log_exception()
 
-        if hasattr(grouped, "proto"):
-            grouped["proto"] = UDP if grouped["proto"] == 2 else TCP
-
+    # Return work (may exist or not.)
     return work
 
 async def update_work_status(curl, status_ids, is_success):
@@ -193,7 +226,8 @@ async def update_work_status(curl, status_ids, is_success):
         statuses.append(params)
 
     if len(statuses):
-        out = await curl.vars({"statuses": statuses}).get("/complete")
+        params = {"statuses": statuses}
+        await retry_curl_on_locked(curl, params, "/complete")
         #print(out.out)
 
 async def validate_service_import(nic, pending_insert, service_monitor):

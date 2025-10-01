@@ -39,7 +39,8 @@ async def worker(nic, curl, init_work=None, table_type=None):
             print("No work found")
             return NO_WORK, []
 
-        is_success = status_ids = []
+        is_success = 0
+        status_ids = [w["status_id"] for w in work if "status_id" in w]
         table_type = work[0]["table_type"]
 
         print()
@@ -52,31 +53,27 @@ async def worker(nic, curl, init_work=None, table_type=None):
         ))
 
         if table_type == IMPORTS_TABLE_TYPE:
-            is_success, status_ids = await imports_monitor(curl, work)
+            is_success = await imports_monitor(curl, work)
             if not is_success:
                 print("Offline -- not importing")
             else:
                 print("Found -- importing new servers")
 
         if table_type == SERVICES_TABLE_TYPE:
-            is_success, status_ids = await service_monitor(nic, work)
-            if not status_ids:
-                print("Error -- unable to update status.")
+            is_success = await service_monitor(nic, work)
+            if is_success:
+                print("Online -- updating uptime", status_ids)
             else:
-                if is_success:
-                    print("Online -- updating uptime", status_ids)
-                else:
-                    print("Offline -- updating uptime", status_ids)
+                print("Offline -- updating uptime", status_ids)
         
         if table_type == ALIASES_TABLE_TYPE:
-            is_success, status_ids = await alias_monitor(curl, work)
+            is_success = await alias_monitor(curl, work)
             if is_success:
                 print("Resolved -- updating IPs", status_ids)
             else:
                 print("No IP found for DNS -- not updating ", status_ids)
 
         await update_work_status(curl, status_ids, is_success)
-        #await curl.vars().get("/freshdb")
         print("Work status updated.")
         return 1, status_ids
     except:
@@ -86,6 +83,8 @@ async def worker(nic, curl, init_work=None, table_type=None):
 
 async def process_work(nic, curl, table_type=None, stagger=False):
     while True:
+        # Execute work from the dealer server.
+        start_time = time.perf_counter()
         try:
             is_success, status_ids = await asyncio.wait_for(
                 worker(nic, curl, table_type=table_type),
@@ -94,16 +93,19 @@ async def process_work(nic, curl, table_type=None, stagger=False):
         except asyncio.TimeoutError:
             is_success = 0
 
+        # If work finished too fast -- add a sleep to avoid DoSing server.     
+        exec_elapsed = time.perf_counter() - start_time
+        if exec_elapsed <= 0.5:
+            ms = int(exec_elapsed * 1000)
+            await sleep_random(max(100, 500 - ms), 1000)
+
+        # Wait for more work or exit.
         if is_success == NO_WORK:
             if stagger:
-                n = random.randrange(1, MONITOR_FREQUENCY // 2)
-                print("Sleeping until next try in secs:", n)
-                await asyncio.sleep(n)
+                print("Sleeping for a few mins...")
+                await sleep_random(30000, 60000)
             else:
                 break
-
-        # Avoid DoS in event of error.
-        await asyncio.sleep(0.1)
 
 async def main(nic=None):
     print("Loading interface...")

@@ -34,17 +34,27 @@ edge case:
         -- move it to the clients -- make it choose alias work, keep looping until
         no work, then sleep for N, before resuming regular work (no specification)
 
+    -- cleanup that status_id update logic since you always seem to want to do
+    that in all cases?
+
     -- theres no port in the server results
     -- make it so you can run do_imports multiple times and it wont interfer with
     existing records
     -- time work and sleep if its too fast -- theres locking errors on aliases rn
     since the work finishes too fast
+        -- sleep for rand secs so it spreads out
+        -- add other tricks for database locks
+            -- if db lock on /work catch exception and return special status to client
+            so client knows to retry after a delay
+                -- theres no validation of server out and if it errors the
+                clients just go into a spam loop
     -- inital /server results some have quality score set to 0
 """
 
 import uvicorn
 import ast
 import aiosqlite
+import sqlite3
 from fastapi import FastAPI, Request, HTTPException, Depends
 from p2pd import *
 from .dealer_utils import *
@@ -60,39 +70,42 @@ refresh_task = None
 async def refresh_server_cache():
     global server_cache
     while True:
-        servers = {}
-        async with aiosqlite.connect(DB_NAME) as db:
-            db.row_factory = aiosqlite.Row
+        try:
+            servers = {}
+            async with aiosqlite.connect(DB_NAME) as db:
+                db.row_factory = aiosqlite.Row
 
-            # Server listing per service type.
-            for service_type in SERVICE_TYPES:
-                per_type = servers[TXTS[service_type]] = {}
-                
-                # Sub-divided by transport support.
-                for proto in (UDP, TCP,):
-                    per_proto = per_type[TXTS["proto"][proto]] = {}
+                # Server listing per service type.
+                for service_type in SERVICE_TYPES:
+                    per_type = servers[TXTS[service_type]] = {}
+                    
+                    # Sub-divided by transport support.
+                    for proto in (UDP, TCP,):
+                        per_proto = per_type[TXTS["proto"][proto]] = {}
 
-                    # Then by address family supported.
-                    for af in VALID_AFS:
-                        sql = """
-                        SELECT *
-                        FROM service_quality
-                        WHERE type = ? 
-                        AND proto = ? 
-                        AND af = ?
-                        ORDER BY group_score DESC, service_id ASC;
-                        """
-                        params = (service_type, proto, af,)
-                        async with db.execute(sql, params) as cursor:
-                            rows = [dict(r) for r in await cursor.fetchall()]
+                        # Then by address family supported.
+                        for af in VALID_AFS:
+                            sql = """
+                            SELECT *
+                            FROM service_quality
+                            WHERE type = ? 
+                            AND proto = ? 
+                            AND af = ?
+                            ORDER BY group_score DESC, service_id ASC;
+                            """
+                            params = (service_type, proto, af,)
+                            async with db.execute(sql, params) as cursor:
+                                rows = [dict(r) for r in await cursor.fetchall()]
 
-                        # Assign the list of groups to the nested structure
-                        per_af = per_proto[TXTS["af"][af]] = rows
+                            # Assign the list of groups to the nested structure
+                            per_af = per_proto[TXTS["af"][af]] = rows
 
-        if servers:
-            server_cache = servers
+            if servers:
+                server_cache = servers
+                server_cache["last_refresh"] = int(time.time())
+        except sqlite3.OperationalError:
+            pass
 
-        server_cache["last_refresh"] = int(time.time())
         await asyncio.sleep(60)
 
 @app.on_event("startup")
@@ -134,37 +147,40 @@ async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=M
         table_type = "%"
 
     # Connect to DB and find some work.
-    async with aiosqlite.connect(DB_NAME) as db:
-        db.row_factory = aiosqlite.Row
+    try:
+        async with aiosqlite.connect(DB_NAME) as db:
+            db.row_factory = aiosqlite.Row
 
-        async with db.execute("BEGIN IMMEDIATE"):
-            # Fetch all status rows, oldest first
-            sql  = """
-            SELECT * FROM status WHERE
-                status != ? AND table_type LIKE ? 
-            ORDER BY last_status ASC
-            """
+            async with db.execute("BEGIN IMMEDIATE"):
+                # Fetch all status rows, oldest first
+                sql  = """
+                SELECT * FROM status WHERE
+                    status != ? AND table_type LIKE ? 
+                ORDER BY last_status ASC
+                """
 
-            async with db.execute(sql, (STATUS_DISABLED, table_type,)) as cursor:
-                status_entries = [dict(r) for r in await cursor.fetchall()]
+                async with db.execute(sql, (STATUS_DISABLED, table_type,)) as cursor:
+                    status_entries = [dict(r) for r in await cursor.fetchall()]
 
-            # Get a group of service(s), aliases, or imports.
-            # Check if its allocatable, mark it allocated, and return it.
-            current_time = current_time or int(time.time())
-            for status_entry in status_entries:
-                group_records = await fetch_group_records(db, status_entry, need_af)
-                allocatable_records = check_allocatable(
-                    group_records,
-                    current_time,
-                    monitor_frequency
-                )
+                # Get a group of service(s), aliases, or imports.
+                # Check if its allocatable, mark it allocated, and return it.
+                current_time = current_time or int(time.time())
+                for status_entry in status_entries:
+                    group_records = await fetch_group_records(db, status_entry, need_af)
+                    allocatable_records = check_allocatable(
+                        group_records,
+                        current_time,
+                        monitor_frequency
+                    )
 
-                if allocatable_records:
-                    # Atomically claim the group
-                    claimed = await claim_group(db, group_records, current_time)
-                    if claimed:
-                        await db.commit()
-                        return allocatable_records
+                    if allocatable_records:
+                        # Atomically claim the group
+                        claimed = await claim_group(db, group_records, current_time)
+                        if claimed:
+                            await db.commit()
+                            return allocatable_records
+    except sqlite3.OperationalError:
+        return "LOCKED"
         
     return []
 
@@ -176,20 +192,22 @@ async def signal_complete_work(statuses):
 
     # Convert dict string back to Python.
     statuses = ast.literal_eval(statuses)
+    try:
+        async with aiosqlite.connect(DB_NAME) as db:
+            db.row_factory = aiosqlite.Row
 
-    async with aiosqlite.connect(DB_NAME) as db:
-        db.row_factory = aiosqlite.Row
+            # Split into a function so it can be using inside a transaction
+            # by the imports method (doesn't call commit on its own.)
+            async with db.execute("BEGIN"):
+                for status_info in statuses:
+                    status_info["db"] = db
+                    ret = await mark_complete(**status_info)
+                    results.append(ret)
 
-        # Split into a function so it can be using inside a transaction
-        # by the imports method (doesn't call commit on its own.)
-        async with db.execute("BEGIN"):
-            for status_info in statuses:
-                status_info["db"] = db
-                ret = await mark_complete(**status_info)
-                results.append(ret)
-
-            # Save all changes as atomic TX.
-            await db.commit()
+                # Save all changes as atomic TX.
+                await db.commit()
+    except sqlite3.OperationalError:
+        return "LOCKED"
 
     return results
 
@@ -197,25 +215,27 @@ async def signal_complete_work(statuses):
 async def update_alias(alias_id, ip, current_time=None):
     ip = ensure_ip_is_public(ip)
     current_time = current_time or int(time.time())
+    try:
+        async with aiosqlite.connect(DB_NAME) as db:
+            async with db.execute("BEGIN"):
+                # Update IP for the alias entry.
+                alias_sql = "UPDATE aliases SET ip = ? WHERE id = ?"
+                await db.execute(alias_sql, (ip, alias_id,))
 
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute("BEGIN"):
-            # Update IP for the alias entry.
-            alias_sql = "UPDATE aliases SET ip = ? WHERE id = ?"
-            await db.execute(alias_sql, (ip, alias_id,))
-
-            # Only update IPs if there's a timeout for a while.
-            for table_name in ("imports", "services"):
-                await update_table_ip(
-                    db,
-                    table_name,
-                    ip,
-                    alias_id,
-                    current_time,
-                )
+                # Only update IPs if there's a timeout for a while.
+                for table_name in ("imports", "services"):
+                    await update_table_ip(
+                        db,
+                        table_name,
+                        ip,
+                        alias_id,
+                        current_time,
+                    )
 
 
-            await db.commit()
+                await db.commit()
+    except sqlite3.OperationalError:
+        return "LOCKED"
 
     return [alias_id]
 
@@ -223,48 +243,53 @@ async def update_alias(alias_id, ip, current_time=None):
 async def insert_services(imports_list, status_id):
     # Convert dict string back to Python.
     imports_list = ast.literal_eval(imports_list)
+    try:
+        # DB connection for sqlite.
+        async with aiosqlite.connect(DB_NAME) as db:
+            db.row_factory = aiosqlite.Row
 
-    # DB connection for sqlite.
-    async with aiosqlite.connect(DB_NAME) as db:
-        db.row_factory = aiosqlite.Row
+            # Create list of group IDs for each service(s) list.
+            group_ids = []
+            for _ in imports_list:
+                group_id = await get_new_group_id(db)
+                group_ids.append(group_id)
 
-        # Create list of group IDs for each service(s) list.
-        group_ids = []
-        for _ in imports_list:
-            group_id = await get_new_group_id(db)
-            group_ids.append(group_id)
+            # Single atomic transaction for all inserts, dels, etc.
+            async with db.execute("BEGIN"):
+                for services in imports_list:
+                    alias_count = 0
 
-        # Single atomic transaction for all inserts, dels, etc.
-        async with db.execute("BEGIN"):
-            for services in imports_list:
-                alias_count = 0
+                    # All inserts happen in the same transaction.
+                    group_id = group_ids.pop(0)
+                    for service in services:
+                        service["group_id"] = group_id
+                        service["db"] = db
+                        if service["alias_id"]:
+                            alias_count += 1
+                            
+                        await insert_service(**service)
 
-                # All inserts happen in the same transaction.
-                group_id = group_ids.pop(0)
-                for service in services:
-                    service["group_id"] = group_id
-                    service["db"] = db
-                    if service["alias_id"]:
-                        alias_count += 1
-                        
-                    await insert_service(**service)
+                    # STUN change servers should have all or no alias.
+                    if services[0]["service_type"] == STUN_CHANGE_TYPE:
+                        if alias_count not in (0, 4,):
+                            raise Exception("STUN change servers need even aliases")
 
-                # STUN change servers should have all or no alias.
-                if services[0]["service_type"] == STUN_CHANGE_TYPE:
-                    if alias_count not in (0, 4,):
-                        raise Exception("STUN change servers need even aliases")
+                # Only allocate imports work once.
+                # This deletes the associated status record. 
+                await mark_complete(
+                    db,
+                    1 if len(imports_list) else 0,
+                    int(status_id),
+                    int(time.time())
+                )
 
-            # Only allocate imports work once.
-            # This deletes the associated status record. 
-            await mark_complete(
-                db,
-                1 if len(imports_list) else 0,
-                int(status_id),
-                int(time.time())
-            )
+                # Commit all changes at once.
+                await db.commit()
+    except sqlite3.OperationalError:
+        return "LOCKED"
 
-            # Commit all changes at once.
-            await db.commit()
+    return []
+
 
 # Show a listing of servers based on quality
 # Only public API is this one.

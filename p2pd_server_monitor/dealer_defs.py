@@ -4,6 +4,7 @@ from p2pd import UDP, TCP, V4, V6
 DB_NAME = "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/monitor.sqlite3"
 WORKER_TIMEOUT = 120
 MONITOR_FREQUENCY = 60 * 60
+MONITOR_FREQUENCY = 60 # Just temp for testing.
 MAX_SERVER_DOWNTIME = 600
 
 ####################################################################################

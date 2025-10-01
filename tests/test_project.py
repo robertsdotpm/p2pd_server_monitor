@@ -251,8 +251,23 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             assert(row["status"] == STATUS_DEALT)
 
     async def test_success_work_should_increase_uptime(self):
-        await insert_services_test_data(self.db)
+        await insert_imports_test_data(self.db)
         work = (await get_work())[0]
+        service = {
+            "service_type": work["type"],
+            "af": work["af"],
+            "proto": int(UDP),
+            "ip": "8.8.8.8",
+            "port": work["port"],
+            "user": work["user"],
+            "password": work["pass"],
+            "alias_id": work["alias_id"]
+        }
+
+
+        await insert_services(str([[service]]), work["status_id"])
+
+        # Indicate complete for import work.
         work = {
             "is_success": 1,
             "status_id": work["status_id"],
@@ -261,12 +276,22 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
         await signal_complete_work(str([work]))
 
+        # Indicate complete for service work.
+        work = (await get_work())[0]
+        work = {
+            "is_success": 1,
+            "status_id": work["status_id"],
+            "t": int(time.time()) + 2
+        }
+        await signal_complete_work(str([work]))
         work["t"] += 2
         await signal_complete_work(str([work]))
 
-        sql = "SELECT * FROM status WHERE id = ?"
-        async with self.db.execute(sql, (work["status_id"],)) as cursor:
+        # Check if uptime went up.
+        sql = "SELECT * FROM status WHERE table_type = ?"
+        async with self.db.execute(sql, (SERVICES_TABLE_TYPE,)) as cursor:
             row = dict((await cursor.fetchall())[0])
+            print(row)
             assert(row["uptime"])
             assert(row["uptime"] == row["max_uptime"])
             assert(row["test_no"] == 2)
@@ -614,17 +639,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             rows = [dict(row) for row in rows]
             assert(rows[0]["ip"] == sim_ip)
 
-    async def test_successive_success_should_increase_uptime(self):
-        pass
-
-    # All work should end up being allocated, processed, then made available.
-    # Then test that can be done multiple times.
-    async def test_systemctl_cleans_out_work_queue_multiple_times(self):
-        pass
-
-    async def test_server_list_has_quality_score_set(self):
-        pass
-
     async def test_monitor_turn_type_with_wrong_credentials(self):
         # Pass wrong user/pass to monitor_turn_type and assert failure
         pass
@@ -636,3 +650,12 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         route = self.nic.route(IP4)
         curl = WebCurl(("example.com", 80), route)
         ret = await alias_monitor(curl, alias)
+
+    # All work should end up being allocated, processed, then made available.
+    # Then test that can be done multiple times.
+    async def test_systemctl_cleans_out_work_queue_multiple_times(self):
+        pass
+
+    async def test_server_list_has_quality_score_set(self):
+        pass
+
