@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export P2PD_DEBUG=1
+#export P2PD_DEBUG=1
 
 n="${MONITOR_WORKER_NO:-20}"
 

@@ -30,7 +30,7 @@ echo "Creating install directory..."
 sudo mkdir -p "$INSTALL_DIR"
 
 echo "Copying scripts..."
-sudo cp start.sh stop.sh "$INSTALL_DIR/"
+sudo cp start.sh stop.sh restart.sh "$INSTALL_DIR/"
 
 echo "Setting ownership and permissions..."
 sudo chown -R "$USER:$GROUP" "$INSTALL_DIR"
@@ -47,7 +47,8 @@ Group=$GROUP
 WorkingDirectory=$INSTALL_DIR
 ExecStart=$INSTALL_DIR/start.sh
 ExecStop=$INSTALL_DIR/stop.sh
-Restart=always
+ExecRestart=$INSTALL_DIR/restart.sh
+Restart=no
 StandardOutput=journal
 StandardError=journal
 

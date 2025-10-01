@@ -2,6 +2,7 @@ import asyncio
 import unittest
 import aiosqlite
 import copy
+import subprocess
 from p2pd import *
 from p2pd_server_monitor import *
 
@@ -11,6 +12,15 @@ VALID_IMPORTS_TEST_DATA = [
     [None, MQTT_TYPE, V4, "44.232.241.40", 1883, None, None],
     [None, TURN_TYPE, V4, "103.253.147.231", 3478, "quickblox", "baccb97ba2d92d71e26eb9886da5f1e0"],
 ]
+
+async def run_cmd(*args):
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    stdout, stderr = await proc.communicate()
+    return proc.returncode, stdout.decode(), stderr.decode()
 
 class TestProject(unittest.IsolatedAsyncioTestCase):
     @classmethod
@@ -651,11 +661,45 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         curl = WebCurl(("example.com", 80), route)
         ret = await alias_monitor(curl, alias)
 
-    # All work should end up being allocated, processed, then made available.
-    # Then test that can be done multiple times.
-    async def test_systemctl_cleans_out_work_queue_multiple_times(self):
-        pass
-
     async def test_server_list_has_quality_score_set(self):
         pass
 
+    # All work should end up being allocated, processed, then made available.
+    # Then test that can be done multiple times.
+    async def test_systemctl_cleans_out_work_queue_multiple_times(self):
+        # Run do imports.
+        result = subprocess.run(
+            "python3 -m p2pd_server_monitor.do_imports".split(" "),
+            check=True,
+            text=True,
+            capture_output=True,
+            cwd="/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor"
+        )
+
+        # Start systemctrl ...
+        result = subprocess.run(
+            "sudo systemctl restart p2pd_monitor".split(" "),
+            check=True,
+            text=True,
+            capture_output=True
+        )
+
+        # Wait for alias work to be done.
+        rows = 1
+        sql = "SELECT * FROM status WHERE table_type=? AND status != ?"
+        params = (ALIASES_TABLE_TYPE, STATUS_AVAILABLE,)
+        while rows:
+            async with self.db.execute(sql, params) as cursor:
+                await asyncio.sleep(0.1)
+                rows = await cursor.fetchall()
+                rows = [dict(row) for row in rows]
+
+        print("All aliases processed.")
+
+        # Stop systemctrl.
+        result = subprocess.run(
+            "sudo systemctl stop p2pd_monitor".split(" "),
+            check=True,
+            text=True,
+            capture_output=True
+        )
