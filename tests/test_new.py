@@ -48,7 +48,7 @@ class TestNew(unittest.IsolatedAsyncioTestCase):
         print()
         print("Insert service record")
         group_id = 2
-        db.insert_service(STUN_CHANGE_TYPE, IP4, UDP, "8.8.8.8", 3333, None, None, group_id, alias["id"])
+        db.insert_service(STUN_CHANGE_TYPE, IP4, UDP, "8.8.8.8", 3333, None, None, alias["id"])
 
         print(db.records[SERVICES_TABLE_TYPE])
 

@@ -11,11 +11,25 @@ work_groups = [table_type][groups ...]  --> [status ...]
 main_records = [table_type]{id: record}
     record = {
     }
+
+for record in init:
+    init pop --> dealt append --> alloc
+
+for record in available
+    if 
+
+
+for record in dealt:
+        if elapsed < worker_timeout
+            all subequent ones are more recent
+            break
+        else:
+            adealt remove -> dealt append --> alloc
 """
 
 import time
-from collections import deque
 from .dealer_defs import *
+from .work_queue import *
 from p2pd import *
 
 
@@ -27,7 +41,7 @@ class MemSchema():
         for table_type in TABLE_TYPES:
             self.work[table_type] = {}
             for af in [IP4, IP6]:
-                self.work[table_type][af] = deque([])
+                self.work[table_type][af] = WorkQueue()
 
         self.records = {} # [table_type][id] => record
         for table_type in TABLE_TYPES:
@@ -52,7 +66,7 @@ class MemSchema():
         self.groups[group_id] = meta_group
 
         # Add group to work queue LOG(1).
-        self.work[table_type][af].append(meta_group)
+        self.work[table_type][af].add_work(group_id, meta_group, STATUS_INIT)
 
         # Add group id field.
         for member in group:
@@ -214,7 +228,8 @@ class MemSchema():
         # Delete target row if status is for an imports.
         # We only want imports work to be done once.
         status = self.statuses[status_id]
-        if status["table_type"] == IMPORTS_TABLE_TYPE:
+        table_type = status["table_type"]
+        if table_type == IMPORTS_TABLE_TYPE:
             status_type = STATUS_DISABLED
 
         if is_success:
@@ -238,6 +253,13 @@ class MemSchema():
         status["test_no"] += 1
         status["last_status"] = t
 
+        # Remove from dealt queue.
+        if status == STATUS_AVAILABLE:
+            af = status["af"]
+            record = self.records[table_type][status["row_id"]]
+            group_id = record["group_id"]
+            self.work[table_type][af].move_work(group_id, STATUS_AVAILABLE)
+
     def update_table_ip(self, table_type, ip, alias_id, current_time):
         if alias_id not in self.records_by_aliases:
             return
@@ -260,3 +282,50 @@ class MemSchema():
                 continue
 
             record["ip"] = ip
+
+
+    def insert_imports_test_data(self, test_data=IMPORTS_TEST_DATA):
+        for info in test_data:
+            fqn = info[0]
+            info = info[1:]
+            record = self.insert_import(*info, fqn=fqn)
+
+            # Set it up as work.
+            self.add_work(record["af"], IMPORTS_TABLE_TYPE, [record])
+
+
+    """
+    async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
+        for groups in test_data:
+            group_id = await get_new_group_id(db)
+            try:
+                async with db.execute("BEGIN"):
+                    # Store alias(es)
+                    alias_id = None
+                    try:
+                        for fqn in group[0]:
+                            alias_id = await fetch_or_insert_alias(db, group[2], fqn)
+                            break
+                    except:
+                        log_exception()
+
+                    # All items in a group share the same group ID.
+                    for group in groups:
+                        insert_id = await insert_service(
+                            db=db,
+                            service_type=group[1],
+                            af=group[2],
+                            proto=group[3],
+                            ip=ip_norm(group[4]),
+                            port=group[5],
+                            user=None,
+                            password=None,
+                            group_id=group_id,
+                            alias_id=alias_id
+                        )
+
+
+                    await db.commit()
+            except:
+                log_exception()
+    """

@@ -154,18 +154,43 @@ def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR
     # Get oldest work by table type and client AF preference.
     for table_choice in table_types:
         for need_af in need_afs:
-            work_table = db.work[table_choice][need_af]
-            if not work_table:
-                continue
-            else:
-                group_meta = work_table.popleft()
-                return group_meta["group"]
+            """
+            The most recent items are always added at the end. Items at the start
+            are oldest. If the oldest items are still too recent to pass time
+            checks then we know that later items in the queue are also too recent.
+            """
+            wq = db.work[table_choice][need_af]
+            for status in (STATUS_INIT, STATUS_AVAILABLE, STATUS_DEALT,):
+                for group_id, meta_group in wq.queues[status]:
+                    assert(meta_group)
+                    group = meta_group["group"]
+
+                    # Never been allocated so safe to hand out.
+                    if status == STATUS_INIT:
+                        wq.move_work(group_id, STATUS_DEALT)
+                        return group
+
+                    # Work is moved back to available but don't do it too soon.
+                    # Statuses are bulk updated for entries in a group.
+                    elapsed = current_time - group[0]["last_status"]
+                    if status != STATUS_DEALT:
+                        if elapsed < monitor_frequency:
+                            break
+
+                    # Check for worker timeout.
+                    if status == STATUS_DEALT:
+                        if elapsed < WORKER_TIMEOUT:
+                            break
+
+                    # Otherwise: allocate it as work.
+                    wq.move_work(group_id, STATUS_DEALT)
+                    return group
 
     return []
 
 # Worker processes check in to signal status of work.
 @app.get("/complete", dependencies=[Depends(localhost_only)])
-async def signal_complete_work(statuses):
+def signal_complete_work(statuses):
     # Return list of updated status IDs.
     results = []
 
