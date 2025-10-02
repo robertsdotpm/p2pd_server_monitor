@@ -174,12 +174,12 @@ async def retry_curl_on_locked(curl, params, endpoint, retries=None):
 
         # Server down, try again.
         if out.info is None:
-            await sleep_random()
+            await sleep_random(1000, 3000)
             continue
 
         # Locked, try again.
-        if to_s(out.out) == "LOCKED":
-            await sleep_random()
+        if '"LOCKED"' in to_s(out.out):
+            await sleep_random(1000, 3000)
             continue
 
         # Return output.
@@ -192,10 +192,15 @@ async def fetch_work_list(curl, table_type=None):
     # Fetch work from dealer server.
     params = {"stack_type": int(nic.stack), "table_type": table_type}
     resp = await retry_curl_on_locked(curl, params, "/work")
+    if resp is None:
+        return INVALID_SERVER_RESPONSE
 
     # Should not happen but check anyway.
     if None in (resp.info, resp.out,):
         log("No resp for /work")
+        print("Fopund none in work response.")
+        print(resp.out)
+        print(resp.info)
         return work
 
     # Wrap in try except for safety:
@@ -211,8 +216,9 @@ async def fetch_work_list(curl, table_type=None):
             if hasattr(grouped, "proto"):
                 grouped["proto"] = UDP if grouped["proto"] == 2 else TCP
     except:
-        log("Could not process server resp as work " + to_s(resp.out))
-        log_exception()
+        print("Could not process server resp as work " + to_s(resp.out))
+        what_exception()
+        return INVALID_SERVER_RESPONSE
 
     # Return work (may exist or not.)
     return work
@@ -227,7 +233,7 @@ async def update_work_status(curl, status_ids, is_success):
 
     if len(statuses):
         params = {"statuses": statuses}
-        await retry_curl_on_locked(curl, params, "/complete")
+        await retry_curl_on_locked(curl, params, "/complete", retries=None)
         #print(out.out)
 
 async def validate_service_import(nic, pending_insert, service_monitor):
@@ -241,7 +247,7 @@ async def validate_service_import(nic, pending_insert, service_monitor):
         )
     else:
         # Reuse the existing code for validation.
-        is_success, status_ids = await service_monitor(nic, [pending_insert])
+        is_success = await service_monitor(nic, [pending_insert])
         service_type = pending_insert["type"]
         if service_type in (MQTT_TYPE, NTP_TYPE, TURN_TYPE,):
             proto = UDP

@@ -93,11 +93,14 @@ async def claim_group(db, group_records, alloc_time):
     SET status=?, last_status=?
     WHERE id IN ({placeholders})
     """
+    
     params = [STATUS_DEALT, t] + status_ids
     result = await db.execute(sql_update, params)
 
     # Only proceed if all rows were updated (claimed)
     return result.rowcount == len(status_ids)
+
+
 
 async def mark_complete(db, is_success, status_id, t):
     # Delete the associated imports row and status record.

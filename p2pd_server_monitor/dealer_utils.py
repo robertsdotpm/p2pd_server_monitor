@@ -14,15 +14,6 @@ class PrettyJSONResponse(JSONResponse):
             indent=2,        # pretty-print here
         ).encode("utf-8")
 
-def ensure_ip_is_public(ip):
-    ip = ip_norm(ip)
-    af = IP4 if "." in ip else IP6
-    ipr = IPRange(ip, af_to_cidr(af))
-    if ipr.is_private:
-        raise Exception("IP must be public.")
-
-    return ip
-
 async def init_status_row(db, row_id, table_type):
     # Parameterized insert
     sql  = "INSERT INTO status (%s) VALUES " % (", ".join(STATUS_SCHEMA)) 

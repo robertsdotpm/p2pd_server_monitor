@@ -49,6 +49,9 @@ edge case:
                 -- theres no validation of server out and if it errors the
                 clients just go into a spam loop
     -- inital /server results some have quality score set to 0
+
+    I think I could refactor this whole thing to use in-memory databases
+    
 """
 
 import uvicorn
@@ -61,9 +64,11 @@ from .dealer_utils import *
 from .db_init import *
 from .dealer_work import *
 from .txt_strs import *
+from .mem_schema import *
 
 app = FastAPI(default_response_class=PrettyJSONResponse)
 
+db = MemSchema()
 server_cache = []
 refresh_task = None
 
@@ -119,7 +124,7 @@ async def main():
         try:
             #await delete_all_data(db)
             await init_settings_table(db)
-            await insert_imports_test_data(db)
+            #await insert_imports_test_data(db)
             await db.commit()
         except:
             what_exception()
@@ -133,55 +138,29 @@ def localhost_only(request: Request):
 
 # Hands out work (servers to check) to worker processes.
 @app.get("/work", dependencies=[Depends(localhost_only)])
-async def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY, table_type=None):
+def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY, table_type=None):
     # Indicate IPv4 / 6 support of worker process.
     if stack_type == DUEL_STACK:
-        need_af = "%"
+        need_afs = VALID_AFS
     else:
-        need_af = stack_type if stack_type in VALID_AFS else "%"
+        need_afs = (stack_type,) if stack_type in VALID_AFS else VALID_AFS
 
     # Set table type.
-    if table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE, ALIASES_TABLE_TYPE,):
-        table_type = table_type
-    else:
-        table_type = "%"
+    if table_type in TABLE_TYPES:
+        table_types = (table_type,)
+    else: 
+        table_types = TABLE_TYPES
 
-    # Connect to DB and find some work.
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            db.row_factory = aiosqlite.Row
+    # Get oldest work by table type and client AF preference.
+    for table_choice in table_types:
+        for need_af in need_afs:
+            work_table = db.work[table_choice][need_af]
+            if not work_table:
+                continue
+            else:
+                group_meta = work_table.popleft()
+                return group_meta["group"]
 
-            async with db.execute("BEGIN IMMEDIATE"):
-                # Fetch all status rows, oldest first
-                sql  = """
-                SELECT * FROM status WHERE
-                    status != ? AND table_type LIKE ? 
-                ORDER BY last_status ASC
-                """
-
-                async with db.execute(sql, (STATUS_DISABLED, table_type,)) as cursor:
-                    status_entries = [dict(r) for r in await cursor.fetchall()]
-
-                # Get a group of service(s), aliases, or imports.
-                # Check if its allocatable, mark it allocated, and return it.
-                current_time = current_time or int(time.time())
-                for status_entry in status_entries:
-                    group_records = await fetch_group_records(db, status_entry, need_af)
-                    allocatable_records = check_allocatable(
-                        group_records,
-                        current_time,
-                        monitor_frequency
-                    )
-
-                    if allocatable_records:
-                        # Atomically claim the group
-                        claimed = await claim_group(db, group_records, current_time)
-                        if claimed:
-                            await db.commit()
-                            return allocatable_records
-    except sqlite3.OperationalError:
-        return "LOCKED"
-        
     return []
 
 # Worker processes check in to signal status of work.
@@ -192,104 +171,58 @@ async def signal_complete_work(statuses):
 
     # Convert dict string back to Python.
     statuses = ast.literal_eval(statuses)
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            db.row_factory = aiosqlite.Row
-
-            # Split into a function so it can be using inside a transaction
-            # by the imports method (doesn't call commit on its own.)
-            async with db.execute("BEGIN"):
-                for status_info in statuses:
-                    status_info["db"] = db
-                    ret = await mark_complete(**status_info)
-                    results.append(ret)
-
-                # Save all changes as atomic TX.
-                await db.commit()
-    except sqlite3.OperationalError:
-        return "LOCKED"
-
+    for status_info in statuses:
+        ret = db.mark_complete(**status_info)
+        results.append(ret)
+    
     return results
-
-@app.get("/alias", dependencies=[Depends(localhost_only)])
-async def update_alias(alias_id, ip, current_time=None):
-    ip = ensure_ip_is_public(ip)
-    current_time = current_time or int(time.time())
-    try:
-        async with aiosqlite.connect(DB_NAME) as db:
-            async with db.execute("BEGIN"):
-                # Update IP for the alias entry.
-                alias_sql = "UPDATE aliases SET ip = ? WHERE id = ?"
-                await db.execute(alias_sql, (ip, alias_id,))
-
-                # Only update IPs if there's a timeout for a while.
-                for table_name in ("imports", "services"):
-                    await update_table_ip(
-                        db,
-                        table_name,
-                        ip,
-                        alias_id,
-                        current_time,
-                    )
-
-
-                await db.commit()
-    except sqlite3.OperationalError:
-        return "LOCKED"
-
-    return [alias_id]
 
 @app.get("/insert", dependencies=[Depends(localhost_only)])
 async def insert_services(imports_list, status_id):
     # Convert dict string back to Python.
     imports_list = ast.literal_eval(imports_list)
-    try:
-        # DB connection for sqlite.
-        async with aiosqlite.connect(DB_NAME) as db:
-            db.row_factory = aiosqlite.Row
+    for groups in imports_list:
+        records = []
+        alias_count = 0
+        for service in groups:
+            record = db.insert_service(**service)
+            records.append(record)
 
-            # Create list of group IDs for each service(s) list.
-            group_ids = []
-            for _ in imports_list:
-                group_id = await get_new_group_id(db)
-                group_ids.append(group_id)
+            if service["alias_id"]:
+                alias_count += 1
 
-            # Single atomic transaction for all inserts, dels, etc.
-            async with db.execute("BEGIN"):
-                for services in imports_list:
-                    alias_count = 0
+        # STUN change servers should have all or no alias.
+        if records[0]["service_type"] == STUN_CHANGE_TYPE:
+            if alias_count not in (0, 4,):
+                # TODO: delete created records.
+                raise Exception("STUN change servers need even aliases")
 
-                    # All inserts happen in the same transaction.
-                    group_id = group_ids.pop(0)
-                    for service in services:
-                        service["group_id"] = group_id
-                        service["db"] = db
-                        if service["alias_id"]:
-                            alias_count += 1
-                            
-                        await insert_service(**service)
+        db.add_work(records[0]["af"], SERVICES_TABLE_TYPE, records)
 
-                    # STUN change servers should have all or no alias.
-                    if services[0]["service_type"] == STUN_CHANGE_TYPE:
-                        if alias_count not in (0, 4,):
-                            raise Exception("STUN change servers need even aliases")
-
-                # Only allocate imports work once.
-                # This deletes the associated status record. 
-                await mark_complete(
-                    db,
-                    1 if len(imports_list) else 0,
-                    int(status_id),
-                    int(time.time())
-                )
-
-                # Commit all changes at once.
-                await db.commit()
-    except sqlite3.OperationalError:
-        return "LOCKED"
+    # Only allocate imports work once.
+    # This deletes the associated status record. 
+    db.mark_complete(
+        1 if len(imports_list) else 0,
+        int(status_id)
+    )
 
     return []
 
+@app.get("/alias", dependencies=[Depends(localhost_only)])
+async def update_alias(alias_id, ip, current_time=None):
+    ip = ensure_ip_is_public(ip)
+    current_time = current_time or int(time.time())
+    if alias_id not in db.records[ALIASES_TABLE_TYPE]:
+        return []
+
+    # Update IP for the alias entry.
+    alias = db.records[ALIASES_TABLE_TYPE][alias_id]
+    alias["ip"] = ip
+
+    for table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE,):
+        db.update_table_ip(table_type, ip, current_time)
+
+    return [alias_id]
 
 # Show a listing of servers based on quality
 # Only public API is this one.

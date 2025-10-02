@@ -32,9 +32,13 @@ if_info = {'id': 'eno1',
 }
 
 async def worker(nic, curl, init_work=None, table_type=None):
+    status_ids = []
     try:
         # A single group of work, 1 or more grouped long.
         work = init_work or (await fetch_work_list(curl, table_type))
+        if work == INVALID_SERVER_RESPONSE:
+            print("Invalid server response, try again.")
+            return 0, []
         if not len(work):
             print("No work found")
             return NO_WORK, []
@@ -66,38 +70,48 @@ async def worker(nic, curl, init_work=None, table_type=None):
             else:
                 print("Offline -- updating uptime", status_ids)
         
+        """
         if table_type == ALIASES_TABLE_TYPE:
-            is_success = await alias_monitor(curl, work)
-            if is_success:
+            res_ip = await asyncio.wait_for(
+                alias_monitor(curl, work),
+                2
+            )
+
+            if res_ip:
+                params = {"alias_id": work[0]["row_id"], "ip": res_ip}
+                await retry_curl_on_locked(curl, params, "/alias")
                 print("Resolved -- updating IPs", status_ids)
             else:
                 print("No IP found for DNS -- not updating ", status_ids)
+        """
 
-        await update_work_status(curl, status_ids, is_success)
         print("Work status updated.")
         return 1, status_ids
     except:
         what_exception()
         log_exception()
-        return 0, []
+        return 0, status_ids
 
 async def process_work(nic, curl, table_type=None, stagger=False):
     while True:
+        await sleep_random(100, 4000)
+
         # Execute work from the dealer server.
         start_time = time.perf_counter()
-        try:
-            is_success, status_ids = await asyncio.wait_for(
-                worker(nic, curl, table_type=table_type),
-                timeout=6
-            )
-        except asyncio.TimeoutError:
-            is_success = 0
+        is_success, status_ids = await worker(nic, curl, table_type=table_type)
+
+
+
+        # Update statuses.
+        await update_work_status(curl, status_ids, is_success)
 
         # If work finished too fast -- add a sleep to avoid DoSing server.     
         exec_elapsed = time.perf_counter() - start_time
         if exec_elapsed <= 0.5:
             ms = int(exec_elapsed * 1000)
             await sleep_random(max(100, 500 - ms), 1000)
+
+        continue
 
         # Wait for more work or exit.
         if is_success == NO_WORK:
@@ -121,14 +135,15 @@ async def main(nic=None):
     await process_work(
         nic,
         curl,
-        table_type=ALIASES_TABLE_TYPE
+        table_type=ALIASES_TABLE_TYPE,
+        stagger=True
     )
 
     # Give time for all DNS requests to finish.
     await asyncio.sleep(3)
 
     # Keep processing alias work until done.
-    await process_work(nic, curl, stagger=True)
+    #await process_work(nic, curl, stagger=True)
 
     # Give time for event loop to finish.
     await asyncio.sleep(2)

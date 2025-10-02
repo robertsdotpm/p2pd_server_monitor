@@ -158,8 +158,6 @@ async def alias_monitor(curl, alias):
     try:
         addr = await Address(alias[0]["fqn"], 80, nic)
         ip = addr.select_ip(alias[0]["af"]).ip
-        params = {"alias_id": alias[0]["row_id"], "ip": ip}
-        await retry_curl_on_locked(curl, params, "/alias")
-        return 1
+        return ip
     except:
         return 0

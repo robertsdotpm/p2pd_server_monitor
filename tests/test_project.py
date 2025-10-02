@@ -55,6 +55,8 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
     async def test_import_complete_should_disable_status(self):
         await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
         work = (await get_work())[0]
+        print(work)
+        
         assert(work["table_type"] == IMPORTS_TABLE_TYPE)
         row_id = work["row_id"]
         work = {
@@ -349,7 +351,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         }]
 
 
-        is_success, status_ids = await monitor_stun_map_type(self.nic, work)
+        is_success = await monitor_stun_map_type(self.nic, work)
         assert(is_success)
 
     async def test_monitor_stun_change_type(self):
@@ -365,7 +367,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         for server in servers:
             server["status_id"] = None
 
-        is_success, status_ids = await monitor_stun_change_type(self.nic, servers)
+        is_success = await monitor_stun_change_type(self.nic, servers)
         assert(is_success)
 
     async def test_monitor_mqtt_type(self):
@@ -377,7 +379,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "status_id": None
         }]
 
-        is_success, status_ids = await monitor_mqtt_type(self.nic, servers)
+        is_success = await monitor_mqtt_type(self.nic, servers)
         assert(is_success)
 
 
@@ -392,7 +394,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "pass": "baccb97ba2d92d71e26eb9886da5f1e0"
         }]
 
-        is_success, status_ids = await monitor_turn_type(self.nic, servers)
+        is_success = await monitor_turn_type(self.nic, servers)
         assert(is_success)
 
     async def test_monitor_ntp_type(self):
@@ -404,7 +406,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "status_id": None
         }]
 
-        is_success, status_ids = await monitor_ntp_type(self.nic, servers)
+        is_success = await monitor_ntp_type(self.nic, servers)
         assert(is_success)
 
     async def test_alias_monitor(self):
@@ -417,7 +419,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "status_id": 0,
         }]
 
-        is_success, status_ids = await alias_monitor(curl, alias)
+        is_success = await alias_monitor(curl, alias)
         assert(is_success)
 
     async def test_imports_monitor(self):
@@ -668,6 +670,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
     # Then test that can be done multiple times.
     async def test_systemctl_cleans_out_work_queue_multiple_times(self):
         # Run do imports.
+        print("Importing all saved servers.")
         result = subprocess.run(
             "python3 -m p2pd_server_monitor.do_imports".split(" "),
             check=True,
@@ -675,31 +678,40 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             capture_output=True,
             cwd="/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor"
         )
+        print("Importing done.")
 
+        """
         # Start systemctrl ...
+        print("Starting monitoring system")
         result = subprocess.run(
             "sudo systemctl restart p2pd_monitor".split(" "),
             check=True,
             text=True,
             capture_output=True
         )
+        """
 
         # Wait for alias work to be done.
+        print("Waiting for alias work to be done.")
         rows = 1
         sql = "SELECT * FROM status WHERE table_type=? AND status != ?"
         params = (ALIASES_TABLE_TYPE, STATUS_AVAILABLE,)
         while rows:
             async with self.db.execute(sql, params) as cursor:
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(1)
                 rows = await cursor.fetchall()
                 rows = [dict(row) for row in rows]
+                print(len(rows))
 
         print("All aliases processed.")
 
+        """
         # Stop systemctrl.
+        print("stopping monitoring system")
         result = subprocess.run(
             "sudo systemctl stop p2pd_monitor".split(" "),
             check=True,
             text=True,
             capture_output=True
         )
+        """
