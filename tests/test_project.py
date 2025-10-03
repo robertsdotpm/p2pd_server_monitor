@@ -52,10 +52,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
     async def test_import_complete_should_disable_status(self):
         db.insert_imports_test_data(VALID_IMPORTS_TEST_DATA)
-        work = get_work()
-        print(work)
-
-        return
+        work = get_work()[0]
         row_id = work["id"]
         comp_status = {
             "is_success": 1,
@@ -78,6 +75,8 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             more_work = get_work()
             if more_work:
                 more_work = more_work[0]
+                print(work)
+                print(more_work)
                 assert(work["status_id"] != more_work["status_id"])
 
     async def test_alias_update_should_update_existing_ips(self):
@@ -87,20 +86,11 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         fqn_test_data = [[fqn] + td[1:] for td in fqn_test_data]
         db.insert_imports_test_data(VALID_IMPORTS_TEST_DATA)
         alias_id = db.fetch_or_insert_alias(int(IP4), fqn)["id"]
-        print(alias_id)
-
-
         for table_type in TABLE_TYPES:
             for row_id in db.records[table_type]:
                 assert(db.records[table_type][row_id]["ip"] != dns_a)
 
-        sql = "SELECT * FROM status"
-        status_ids = []
-        async with self.db.execute(sql) as cursor:
-            rows = await cursor.fetchall()
-            rows = [dict(row) for row in rows]
-            for row in rows:
-                status_ids.append(row["id"])
+        status_ids = [k for k in db.statuses]
 
         # Simulate 2 failed checks to ensure downtime > MAX_SERVER_DOWNTIME.
         for i in range(2, 4):
@@ -111,26 +101,25 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
                     "t": int(time.time()) + i
                 }
 
-                await signal_complete_work(str([outcome]))
+                signal_complete_work(str([outcome]))
 
-        await update_alias(alias_id, dns_a)
 
-        for table_name in ("aliases", "services"):
-            sql = f"SELECT * FROM {table_name}"
-            async with self.db.execute(sql) as cursor:
-                rows = await cursor.fetchall()
-                rows = [dict(row) for row in rows]
-                for row in rows:
-                    assert(row["ip"] == dns_a)
+        update_alias(alias_id, dns_a)
+        for table_type in (ALIASES_TABLE_TYPE, SERVICES_TABLE_TYPE,):
+            for row_id in db.records[table_type]:
+                record = db.records[table_type][row_id]
+                assert(record["ip"] == dns_a)
         
 
     async def test_insert_should_create_new_service(self):
-        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
-        work = dict((await get_work())[0])
+        db.insert_imports_test_data(VALID_IMPORTS_TEST_DATA)
+        work = get_work()[0]
         status_id = work["status_id"]
+
+
         service = {
             "service_type": work["type"],
-            "af": work["af"],
+            "af": int(work["af"]),
             "proto": int(UDP),
             "ip": work["ip"],
             "port": work["port"],
@@ -139,20 +128,14 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "alias_id": work["alias_id"]
         }
 
-        sql = "SELECT * FROM services"
-        async with self.db.execute(sql) as cursor:
-            rows = await cursor.fetchall()
-            assert(not len(rows))
-
-        await insert_services(str([[service]]), status_id)
-
-        async with self.db.execute(sql) as cursor:
-            rows = await cursor.fetchall()
-            assert(len(rows))
+        assert(not len(db.records[SERVICES_TABLE_TYPE]))
+        
+        insert_services(str([[service]]), status_id)
+        assert(len(db.records[SERVICES_TABLE_TYPE]))
 
     async def test_import_list_group_id_assumptions(self):
-        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
-        work = dict((await get_work())[0])
+        db.insert_imports_test_data(VALID_IMPORTS_TEST_DATA)
+        work = get_work()[0]
         status_id = work["status_id"]
 
         primary = {
@@ -177,38 +160,34 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             [another]
         ]
 
-        await insert_services(str(imports_list), status_id)
+        insert_services(str(imports_list), status_id)
 
-        sql = "SELECT * FROM services"
-        async with self.db.execute(sql) as cursor:
-            rows = await cursor.fetchall()
-            rows = [dict(row) for row in rows]
-            assert(rows[0]["group_id"] == rows[1]["group_id"])
-            assert(rows[0]["group_id"] != rows[2]["group_id"])
+        rows = list(db.records[SERVICES_TABLE_TYPE].values())
+        assert(rows[0]["group_id"] == rows[1]["group_id"])
+        assert(rows[0]["group_id"] != rows[2]["group_id"])
 
     async def test_new_alias_should_be_allocatable_as_work(self):
-        alias_id = await fetch_or_insert_alias(self.db, int(IP4), "x.com")
-        await self.db.commit()
-        work = await get_work()
+        alias = db.fetch_or_insert_alias(int(IP4), "x.com")
+        work = get_work()
         assert(len(work))
 
     async def test_work_reallocated_after_worker_timeout(self):
-        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
+        db.insert_imports_test_data(VALID_IMPORTS_TEST_DATA)
         for i in range(0, len(VALID_IMPORTS_TEST_DATA)):
-            work = (await get_work())[0]
+            work = get_work()
 
-        work = await get_work()
+        work = get_work()
         assert(not len(work))
 
         # Simulate fetch work after a long time.
-        work = await get_work(current_time=int(time.time()) + (WORKER_TIMEOUT * 2))
+        work = get_work(current_time=int(time.time()) + (WORKER_TIMEOUT * 2))
         assert(len(work))        
 
     async def test_work_not_allocated_before_second_threshold(self):
         test_data = SERVICES_TEST_DATA[:]
         for group in test_data:
-            await insert_services_test_data(self.db, test_data=[group])
-            work = (await get_work(monitor_frequency=10))
+            db.insert_services_test_data([group])
+            work = get_work(monitor_frequency=10)
             assert(len(work))
 
             work_list = work[:]
@@ -219,10 +198,11 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
                     "t": int(time.time())
                 }
 
-                await signal_complete_work(str([signal]))
+                signal_complete_work(str([signal]))
 
-            work = await get_work(monitor_frequency=10)
+            work = get_work()
             assert(not len(work))
+
 
             for serv in work_list:
                 signal = {
@@ -231,23 +211,27 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
                     "t": int(time.time())
                 }
 
-                await signal_complete_work(str([signal]))
+                signal_complete_work(str([signal]))
 
-            work = await get_work(monitor_frequency=10)
+            work = get_work()
             assert(not len(work))
 
-            t = int(time.time()) + 15
+            t = int(time.time()) + (MONITOR_FREQUENCY * 2)
 
-            work = await get_work(monitor_frequency=10, current_time=t)
+            work = get_work(current_time=t)
             assert(len(work))
 
     async def test_allocated_work_should_be_marked_allocated(self):
-        await insert_imports_test_data(self.db, VALID_IMPORTS_TEST_DATA)
-        work = (await get_work())[0]
-        sql = "SELECT * FROM status WHERE id = ?"
-        async with self.db.execute(sql, (work["status_id"],)) as cursor:
-            row = dict((await cursor.fetchall())[0])
-            assert(row["status"] == STATUS_DEALT)
+        db.insert_imports_test_data(VALID_IMPORTS_TEST_DATA)
+        work = get_work()
+        found = False
+        for af in (IP4, IP6,):
+            qs = db.work[IMPORTS_TABLE_TYPE][af].queues
+            for allocated in qs[STATUS_DEALT]:
+                if allocated[1]["group"] == work:
+                    found = True
+
+        assert(found)
 
     async def test_success_work_should_increase_uptime(self):
         await insert_imports_test_data(self.db)

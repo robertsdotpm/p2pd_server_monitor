@@ -152,6 +152,7 @@ def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR
         table_types = TABLE_TYPES
 
     # Get oldest work by table type and client AF preference.
+    current_time = current_time or int(time.time())
     for table_choice in table_types:
         for need_af in need_afs:
             """
@@ -160,25 +161,26 @@ def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR
             checks then we know that later items in the queue are also too recent.
             """
             wq = db.work[table_choice][need_af]
-            for status in (STATUS_INIT, STATUS_AVAILABLE, STATUS_DEALT,):
-                for group_id, meta_group in wq.queues[status]:
+            for status_type in (STATUS_INIT, STATUS_AVAILABLE, STATUS_DEALT,):
+                for group_id, meta_group in wq.queues[status_type]:
                     assert(meta_group)
                     group = meta_group["group"]
 
                     # Never been allocated so safe to hand out.
-                    if status == STATUS_INIT:
+                    if status_type == STATUS_INIT:
                         wq.move_work(group_id, STATUS_DEALT)
                         return group
 
                     # Work is moved back to available but don't do it too soon.
                     # Statuses are bulk updated for entries in a group.
-                    elapsed = current_time - group[0]["last_status"]
-                    if status != STATUS_DEALT:
+                    status = db.statuses[group[0]["status_id"]]
+                    elapsed = current_time - status["last_status"]
+                    if status_type != STATUS_DEALT:
                         if elapsed < monitor_frequency:
                             break
 
                     # Check for worker timeout.
-                    if status == STATUS_DEALT:
+                    if status_type == STATUS_DEALT:
                         if elapsed < WORKER_TIMEOUT:
                             break
 
@@ -203,7 +205,7 @@ def signal_complete_work(statuses):
     return results
 
 @app.get("/insert", dependencies=[Depends(localhost_only)])
-async def insert_services(imports_list, status_id):
+def insert_services(imports_list, status_id):
     # Convert dict string back to Python.
     imports_list = ast.literal_eval(imports_list)
     for groups in imports_list:
@@ -217,7 +219,7 @@ async def insert_services(imports_list, status_id):
                 alias_count += 1
 
         # STUN change servers should have all or no alias.
-        if records[0]["service_type"] == STUN_CHANGE_TYPE:
+        if records[0]["type"] == STUN_CHANGE_TYPE:
             if alias_count not in (0, 4,):
                 # TODO: delete created records.
                 raise Exception("STUN change servers need even aliases")
@@ -234,7 +236,7 @@ async def insert_services(imports_list, status_id):
     return []
 
 @app.get("/alias", dependencies=[Depends(localhost_only)])
-async def update_alias(alias_id, ip, current_time=None):
+def update_alias(alias_id, ip, current_time=None):
     ip = ensure_ip_is_public(ip)
     current_time = current_time or int(time.time())
     if alias_id not in db.records[ALIASES_TABLE_TYPE]:
@@ -245,7 +247,7 @@ async def update_alias(alias_id, ip, current_time=None):
     alias["ip"] = ip
 
     for table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE,):
-        db.update_table_ip(table_type, ip, current_time)
+        db.update_table_ip(table_type, ip, alias_id, current_time)
 
     return [alias_id]
 

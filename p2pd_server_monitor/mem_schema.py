@@ -187,12 +187,14 @@ class MemSchema():
 
     def insert_import(self, import_type, af, ip, port, user=None, password=None, fqn=None):
         # Create alias record.
+        af = int(af)
         if fqn:
             alias = self.fetch_or_insert_alias(af, fqn)
             alias_id = alias["id"]
         else:
             alias_id = None
 
+        
         return self.insert_record(
             table_type=IMPORTS_TABLE_TYPE,
             record_type=import_type,
@@ -204,8 +206,9 @@ class MemSchema():
             alias_id=alias_id
         )
 
-
     def insert_service(self, service_type, af, proto, ip, port, user, password, alias_id):
+        af = int(af)
+        proto = int(proto)
         return self.insert_record(
             table_type=SERVICES_TABLE_TYPE,
             record_type=service_type,
@@ -261,9 +264,6 @@ class MemSchema():
             self.work[table_type][af].move_work(group_id, STATUS_AVAILABLE)
 
     def update_table_ip(self, table_type, ip, alias_id, current_time):
-        if alias_id not in self.records_by_aliases:
-            return
-        
         for record in self.records_by_aliases[alias_id]:
             if record["table_type"] != table_type:
                 continue
@@ -276,7 +276,7 @@ class MemSchema():
                 record["test_no"] >= 2
 
             cond_two = record["last_success"] and \
-            ((current_time - record["last_uptime"]) > MAX_SERVER_DOWNTIME * 2)
+                ((current_time - record["last_uptime"]) > MAX_SERVER_DOWNTIME * 2)
 
             if not (cond_one or cond_two):
                 continue
@@ -293,39 +293,46 @@ class MemSchema():
             # Set it up as work.
             self.add_work(record["af"], IMPORTS_TABLE_TYPE, [record])
 
+    def insert_services_test_data(self, test_data=IMPORTS_TEST_DATA):
+        for info in test_data:
+            fqn = info[0]
+            info = info[1:]
+            record = self.insert_import(*info, fqn=fqn)
 
-    """
-    async def insert_services_test_data(db, test_data=SERVICES_TEST_DATA):
+            # Set it up as work.
+            self.add_work(record["af"], IMPORTS_TABLE_TYPE, [record])
+
+
+    def insert_services_test_data(self, test_data=SERVICES_TEST_DATA):
         for groups in test_data:
-            group_id = await get_new_group_id(db)
-            try:
-                async with db.execute("BEGIN"):
-                    # Store alias(es)
-                    alias_id = None
-                    try:
-                        for fqn in group[0]:
-                            alias_id = await fetch_or_insert_alias(db, group[2], fqn)
-                            break
-                    except:
-                        log_exception()
+            records = []
 
-                    # All items in a group share the same group ID.
-                    for group in groups:
-                        insert_id = await insert_service(
-                            db=db,
-                            service_type=group[1],
-                            af=group[2],
-                            proto=group[3],
-                            ip=ip_norm(group[4]),
-                            port=group[5],
-                            user=None,
-                            password=None,
-                            group_id=group_id,
-                            alias_id=alias_id
-                        )
+            # All items in a group share the same group ID.
+            for group in groups:
 
+                # Store alias(es)
+                alias = None
+                try:
+                    for fqn in group[0]:
+                        alias = self.fetch_or_insert_alias(group[2], fqn)
+                        break
+                except:
+                    log_exception()
 
-                    await db.commit()
-            except:
-                log_exception()
-    """
+                alias_id = alias["id"] if alias else None
+                record = self.insert_service(
+                    service_type=group[1],
+                    af=group[2],
+                    proto=group[3],
+                    ip=ip_norm(group[4]),
+                    port=group[5],
+                    user=None,
+                    password=None,
+                    alias_id=alias_id
+                )
+
+                records.append(record)
+
+            self.add_work(records[0]["af"], SERVICES_TABLE_TYPE, records)
+
+   
