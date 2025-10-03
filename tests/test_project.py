@@ -234,8 +234,8 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         assert(found)
 
     async def test_success_work_should_increase_uptime(self):
-        await insert_imports_test_data(self.db)
-        work = (await get_work())[0]
+        db.insert_imports_test_data(VALID_IMPORTS_TEST_DATA)
+        work = get_work()[0]
         service = {
             "service_type": work["type"],
             "af": work["af"],
@@ -248,7 +248,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         }
 
 
-        await insert_services(str([[service]]), work["status_id"])
+        insert_services(str([[service]]), work["status_id"])
 
         # Indicate complete for import work.
         work = {
@@ -257,32 +257,29 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "t": int(time.time()) + 2
         }
 
-        await signal_complete_work(str([work]))
+        signal_complete_work(str([work]))
 
         # Indicate complete for service work.
-        work = (await get_work())[0]
+        work = get_work()[0]
         work = {
             "is_success": 1,
             "status_id": work["status_id"],
             "t": int(time.time()) + 2
         }
-        await signal_complete_work(str([work]))
+        signal_complete_work(str([work]))
         work["t"] += 2
-        await signal_complete_work(str([work]))
+        signal_complete_work(str([work]))
 
-        # Check if uptime went up.
-        sql = "SELECT * FROM status WHERE table_type = ?"
-        async with self.db.execute(sql, (SERVICES_TABLE_TYPE,)) as cursor:
-            row = dict((await cursor.fetchall())[0])
-            print(row)
-            assert(row["uptime"])
-            assert(row["uptime"] == row["max_uptime"])
-            assert(row["test_no"] == 2)
+        status = db.statuses[work["status_id"]]
+        assert(status["uptime"])
+        assert(status["uptime"] == status["max_uptime"])
+        assert(status["test_no"] == 2)
 
 
     async def test_failed_work_should_reset_uptime(self):
-        await insert_services_test_data(self.db)
-        work = (await get_work())[0]
+        db.insert_services_test_data()
+        work = get_work()[0]
+
 
         # First -- set uptime and max_uptime to a positive value.
         indicate_success = {
@@ -291,9 +288,10 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "t": int(time.time()) + 2
         }
 
-        await signal_complete_work(str([indicate_success]))
+        signal_complete_work(str([indicate_success]))
         indicate_success["t"] += 2
-        await signal_complete_work(str([indicate_success]))
+        signal_complete_work(str([indicate_success]))
+
 
         # Then -- indicate a failed test.
         indicate_failure = {
@@ -302,15 +300,13 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "t": int(time.time()) + 4
         }
 
-        await signal_complete_work(str([indicate_failure]))
+        signal_complete_work(str([indicate_failure]))
 
+        row = db.statuses[work["status_id"]]
 
-        sql = "SELECT * FROM status WHERE id = ?"
-        async with self.db.execute(sql, (work["status_id"],)) as cursor:
-            row = dict((await cursor.fetchall())[0])
-            assert(not row["uptime"])
-            assert(row["max_uptime"])
-            assert(row["test_no"] == 3)
+        assert(not row["uptime"])
+        assert(row["max_uptime"])
+        assert(row["test_no"] == 3)
 
     async def test_monitor_stun_map_type(self):
         work = [{
