@@ -3,6 +3,7 @@ import unittest
 import aiosqlite
 import copy
 import subprocess
+import uvicorn
 from p2pd import *
 from p2pd_server_monitor import *
 
@@ -678,20 +679,18 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
     # All work should end up being allocated, processed, then made available.
     # Then test that can be done multiple times.
     async def test_systemctl_cleans_out_work_queue_multiple_times(self):
-        return
-    
         # Run do imports.
         print("Importing all saved servers.")
-        result = subprocess.run(
-            "python3 -m p2pd_server_monitor.do_imports".split(" "),
-            check=True,
-            text=True,
-            capture_output=True,
-            cwd="/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor"
-        )
         print("Importing done.")
 
-        """
+        # maybe start server here first so server is in this proces and
+        # doesnt start when systemctl runs but the workers do?
+        # then you can call concurrency_test easily
+        config = uvicorn.Config(app, host="127.0.0.1", port=8000, log_level="info")
+        server = uvicorn.Server(config)
+        asyncio.create_task(server.serve())
+        #await server.serve()
+        
         # Start systemctrl ...
         print("Starting monitoring system")
         result = subprocess.run(
@@ -700,23 +699,13 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             text=True,
             capture_output=True
         )
-        """
+        
+        await asyncio.sleep(5)
 
-        # Wait for alias work to be done.
-        print("Waiting for alias work to be done.")
-        rows = 1
-        sql = "SELECT * FROM status WHERE table_type=? AND status != ?"
-        params = (ALIASES_TABLE_TYPE, STATUS_AVAILABLE,)
-        while rows:
-            async with self.db.execute(sql, params) as cursor:
-                await asyncio.sleep(1)
-                rows = await cursor.fetchall()
-                rows = [dict(row) for row in rows]
-                print(len(rows))
+        await concurrency_test()
 
-        print("All aliases processed.")
 
-        """
+        
         # Stop systemctrl.
         print("stopping monitoring system")
         result = subprocess.run(
@@ -725,4 +714,4 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             text=True,
             capture_output=True
         )
-        """
+        

@@ -136,7 +136,8 @@ class MemSchema():
 
     def insert_record(self, table_type, record_type, af, ip, port, user, password, proto=None, fqn=None, alias_id=None):
         # Some servers like to point to local resources for trickery.
-        ip = ensure_ip_is_public(ip)
+        if ip not in ("0", ""):
+            ip = ensure_ip_is_public(ip)
 
         # Sanity tests.
         """

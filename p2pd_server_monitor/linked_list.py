@@ -8,6 +8,7 @@ class LinkedList:
     def __init__(self):
         self.head = None
         self.tail = None
+        self.count = 0
 
     def append(self, value):
         """Append value to the end and return its node."""
@@ -18,6 +19,8 @@ class LinkedList:
             self.tail.next = node
             node.prev = self.tail
             self.tail = node
+
+        self.count += 1
         return node
 
     def remove(self, node):
@@ -31,6 +34,7 @@ class LinkedList:
         else:
             self.tail = node.prev
         node.prev = node.next = None  # detach
+        self.count -= 1
 
     def popleft(self):
         """Pop from the front (like deque.popleft)."""
@@ -48,3 +52,6 @@ class LinkedList:
 
     def __bool__(self):
         return self.head is not None
+
+    def __len__(self):
+        return self.count

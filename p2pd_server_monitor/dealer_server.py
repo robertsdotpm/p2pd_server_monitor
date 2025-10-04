@@ -65,6 +65,7 @@ from .db_init import *
 from .dealer_work import *
 from .txt_strs import *
 from .mem_schema import *
+from .do_imports import *
 
 app = FastAPI(default_response_class=PrettyJSONResponse)
 
@@ -116,6 +117,7 @@ async def refresh_server_cache():
 @app.on_event("startup")
 async def main():
     global refresh_task
+    """
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute("PRAGMA journal_mode=WAL;")
         await db.execute("PRAGMA synchronous = 1;")
@@ -128,13 +130,42 @@ async def main():
             await db.commit()
         except:
             what_exception()
+    """
+
+    
+    insert_main(db)
     
     refresh_task = asyncio.create_task(refresh_server_cache())
+
+
 
 def localhost_only(request: Request):
     client_host = request.client.host
     if client_host not in ("127.0.0.1", "::1"):
         raise HTTPException(status_code=403, detail="Access forbidden")
+    
+@app.get("/concurrency_test", dependencies=[Depends(localhost_only)])
+async def concurrency_test():
+    # Wait for alias work to be done.
+    print("Waiting for alias work to be done.")
+
+
+
+    while 1:
+        still_set = False
+        for status_type in (STATUS_INIT, STATUS_AVAILABLE,):
+            for af in VALID_AFS:
+                q = db.work[ALIASES_TABLE_TYPE][af].queues[status_type]
+                if len(q):
+                    still_set = True
+                    print(af, " ", status_type, " ", len(q))
+
+        if not still_set:
+            break
+
+        await asyncio.sleep(0.1)
+
+    print("All aliases processed.")
 
 # Hands out work (servers to check) to worker processes.
 @app.get("/work", dependencies=[Depends(localhost_only)])
