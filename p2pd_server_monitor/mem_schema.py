@@ -35,13 +35,16 @@ from p2pd import *
 
 class MemSchema():
     def __init__(self):
+        self.delete_all()
+
+    def delete_all(self):
         self.statuses = {} # id: status
         self.groups = {} # group_id: [status ...]
         self.work = {} # [table_type] -> queue -> [status ...]
         for table_type in TABLE_TYPES:
             self.work[table_type] = {}
             for af in [IP4, IP6]:
-                self.work[table_type][af] = WorkQueue()
+                self.work[table_type][int(af)] = WorkQueue()
 
         self.records = {} # [table_type][id] => record
         for table_type in TABLE_TYPES:
@@ -101,7 +104,8 @@ class MemSchema():
             "fqn": fqn,
             "ip": ip,
             "group_id": None,
-            "status_id": None
+            "status_id": None,
+            "table_type": ALIASES_TABLE_TYPE
         }
 
         # Check unique constraint.
@@ -134,8 +138,18 @@ class MemSchema():
         # Some servers like to point to local resources for trickery.
         ip = ensure_ip_is_public(ip)
 
+        # Sanity tests.
+        """
+        if af not in VALID_AFS:
+            raise Exception("Invalid AF for insert record.")
+        if not valid_port(port):
+            raise Exception("Invalid port.")
+        if proto not in (None, TCP, UDP):
+            raise Exception("Invalid proto.")
+        """
+
         # Load alias row to ensure it exists.
-        if alias_id:
+        if alias_id is not None:
             if alias_id not in self.records[ALIASES_TABLE_TYPE]:
                 raise Exception("No alias called id " + str(alias_id))
             else:
@@ -152,6 +166,7 @@ class MemSchema():
         # Record imports record.
         record = {
             "id": row_id,
+            "table_type": table_type,
             "type": record_type,
             "af": af,
             "proto": proto,
@@ -180,7 +195,7 @@ class MemSchema():
         self.records[table_type][row_id] = record
 
         # Look this up by alias_id.
-        if alias_id:
+        if alias_id is not None:
             self.records_by_aliases[alias_id].append(record)
 
         return record
@@ -268,21 +283,26 @@ class MemSchema():
             if record["table_type"] != table_type:
                 continue
 
-            if record["status"] == STATUS_DISABLED:
+            status = self.statuses[record["status_id"]]
+            if status["status"] == STATUS_DISABLED:
                 continue
 
-            cond_one = not record["last_success"] and \
-                not record["last_uptime"] and \
-                record["test_no"] >= 2
+            print("update table ip = ", record)
 
-            cond_two = record["last_success"] and \
-                ((current_time - record["last_uptime"]) > MAX_SERVER_DOWNTIME * 2)
+            cond_one = not status["last_success"] and \
+                not status["last_uptime"] and \
+                status["test_no"] >= 2
+
+            cond_two = status["last_success"] and \
+                ((current_time - status["last_uptime"]) > MAX_SERVER_DOWNTIME * 2)
+
+            print("cond one = ", cond_one)
+            print("cond two = ", cond_two)
 
             if not (cond_one or cond_two):
                 continue
 
             record["ip"] = ip
-
 
     def insert_imports_test_data(self, test_data=IMPORTS_TEST_DATA):
         for info in test_data:
@@ -292,16 +312,6 @@ class MemSchema():
 
             # Set it up as work.
             self.add_work(record["af"], IMPORTS_TABLE_TYPE, [record])
-
-    def insert_services_test_data(self, test_data=IMPORTS_TEST_DATA):
-        for info in test_data:
-            fqn = info[0]
-            info = info[1:]
-            record = self.insert_import(*info, fqn=fqn)
-
-            # Set it up as work.
-            self.add_work(record["af"], IMPORTS_TABLE_TYPE, [record])
-
 
     def insert_services_test_data(self, test_data=SERVICES_TEST_DATA):
         for groups in test_data:
