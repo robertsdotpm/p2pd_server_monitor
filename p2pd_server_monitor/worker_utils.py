@@ -1,4 +1,5 @@
 import asyncio
+import httpx
 import aiosqlite
 from p2pd import *
 from .dealer_defs import *
@@ -163,27 +164,24 @@ async def validate_rfc3489_stun_server(af, proto, nic, primary_tup, secondary_tu
         )
 
 # Will just have workers wait until success.
-async def retry_curl_on_locked(curl, params, endpoint, retries=None):
-    while retries is None or retries > 0:
-        # Decrement sentinel.
-        if retries is not None:
-            retries -= 1
+async def retry_curl_on_locked(curl, params, endpoint, retries=3):
+    url = "http://localhost:8000" + endpoint
+    async with httpx.AsyncClient() as client:
+        while retries is None or retries > 0:
+            # Decrement sentinel.
+            if retries is not None:
+                retries -= 1
 
-        # Make the request.
-        out = await curl.vars(params).get(endpoint)
+            # Make the request.
+            response = await client.post(url, json=params)
 
-        # Server down, try again.
-        if out.info is None:
-            await sleep_random(1000, 3000)
-            continue
+            # Server down, try again.
+            if response.status_code is not 200:
+                await sleep_random(1000, 3000)
+                continue
 
-        # Locked, try again.
-        if '"LOCKED"' in to_s(out.out):
-            await sleep_random(1000, 3000)
-            continue
-
-        # Return output.
-        return out
+            # Return output.
+            return response.json()
 
 async def fetch_work_list(curl, table_type=None):
     nic = curl.route.interface
@@ -195,18 +193,11 @@ async def fetch_work_list(curl, table_type=None):
     if resp is None:
         return INVALID_SERVER_RESPONSE
 
-    # Should not happen but check anyway.
-    if None in (resp.info, resp.out,):
-        log("No resp for /work")
-        print("Fopund none in work response.")
-        print(resp.out)
-        print(resp.info)
-        return work
 
     # Wrap in try except for safety:
     # Server might return an unexpected response.
     try:
-        work = json.loads(to_s(resp.out))
+        work = resp
         f = lambda r: r["id"]
         work = sorted(work, key=f)
         for grouped in work:

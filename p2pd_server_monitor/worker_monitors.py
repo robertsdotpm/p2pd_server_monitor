@@ -62,7 +62,7 @@ async def monitor_mqtt_type(nic, work):
 
 async def monitor_turn_type(nic, work):
     user = "" if work[0]["user"] is None else work[0]["user"]
-    password = "" if work[0]["pass"] is None else work[0]["pass"]
+    password = "" if work[0]["password"] is None else work[0]["password"]
     client = await TURNClient(
         af=work[0]["af"],
         dest=(work[0]["ip"], work[0]["port"]),
@@ -127,11 +127,11 @@ async def imports_monitor(curl, pending_insert):
         services = []
         for server in validated_list:
             services.append({
-                "service_type": server[0],
+                "service_type": int(server[0]),
                 "af": int(server[1]),
                 "proto": int(server[2]),
                 "ip": server[3],
-                "port": server[4],
+                "port": int(server[4]),
                 "user": server[5],
                 "password": server[6],
                 "alias_id": pending_insert[0]["alias_id"]

@@ -43,15 +43,23 @@ async def worker(nic, curl, init_work=None, table_type=None):
             print("No work found")
             return NO_WORK, []
 
+        print("got work = ", work)
+        input()
+
         is_success = 0
         status_ids = [w["status_id"] for w in work if "status_id" in w]
         table_type = work[0]["table_type"]
 
         print()
+        proto = "ANY"
+        if "proto" in work[0]:
+            if work[0]["proto"]:
+                proto = TXTS["proto"][work[0]["proto"]]
+            
         print("Doing %s work for %s on %s:%s:%d" % (
             TXTS[table_type],
             TXTS[work[0]["type"]] if "type" in work[0] else work[0]["fqn"],
-            TXTS["proto"][work[0]["proto"]] if "proto" in work[0] else "ANY",
+            proto,
             work[0]["ip"],
             int(work[0]["port"] if "port" in work[0] else "53"),
         ))
@@ -70,7 +78,7 @@ async def worker(nic, curl, init_work=None, table_type=None):
             else:
                 print("Offline -- updating uptime", status_ids)
         
-        """
+        
         if table_type == ALIASES_TABLE_TYPE:
             res_ip = await asyncio.wait_for(
                 alias_monitor(curl, work),
@@ -78,12 +86,12 @@ async def worker(nic, curl, init_work=None, table_type=None):
             )
 
             if res_ip:
-                params = {"alias_id": work[0]["row_id"], "ip": res_ip}
+                params = {"alias_id": int(work[0]["id"]), "ip": res_ip}
                 await retry_curl_on_locked(curl, params, "/alias")
                 print("Resolved -- updating IPs", status_ids)
             else:
                 print("No IP found for DNS -- not updating ", status_ids)
-        """
+        
 
         print("Work status updated.")
         return 1, status_ids
@@ -100,8 +108,6 @@ async def process_work(nic, curl, table_type=None, stagger=False):
         start_time = time.perf_counter()
         is_success, status_ids = await worker(nic, curl, table_type=table_type)
 
-
-
         # Update statuses.
         await update_work_status(curl, status_ids, is_success)
 
@@ -111,7 +117,7 @@ async def process_work(nic, curl, table_type=None, stagger=False):
             ms = int(exec_elapsed * 1000)
             await sleep_random(max(100, 500 - ms), 1000)
 
-        continue
+        #continue
 
         # Wait for more work or exit.
         if is_success == NO_WORK:

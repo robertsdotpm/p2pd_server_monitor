@@ -24,7 +24,8 @@ class WorkQueue:
         self.queues = {
             STATUS_INIT: LinkedList(),
             STATUS_AVAILABLE: LinkedList(),
-            STATUS_DEALT: LinkedList()
+            STATUS_DEALT: LinkedList(),
+            STATUS_DISABLED: LinkedList()
         }
 
         # work_id -> (queue_name, node reference)

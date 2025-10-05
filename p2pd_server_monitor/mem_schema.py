@@ -27,11 +27,37 @@ for record in dealt:
             adealt remove -> dealt append --> alloc
 """
 
+import math
 import time
+from typing_extensions import TypedDict
+from typing import Any, List
+from pydantic import BaseModel
 from .dealer_defs import *
 from .work_queue import *
 from p2pd import *
 
+class AliasType(BaseModel):
+    id: int
+    af: int
+    fqn: str
+    ip: str | None
+    group_id: int
+    status_id: int
+    table_type: int
+
+class RecordType(BaseModel):
+    id: int
+    table_type: int
+    type: int
+    af: int
+    proto: int | None
+    ip: str | None
+    port: int
+    user: str | None
+    password: str | None
+    alias_id: int | None
+    status_id: int
+    group_id: int
 
 class MemSchema():
     def __init__(self):
@@ -60,7 +86,7 @@ class MemSchema():
     def add_work(self, af, table_type, group):
         # Save this as a new "group".
         group_id = len(self.groups)
-        meta_group = {""
+        meta_group = {
             "id": group_id,
             "group": group,
             "table_type": table_type,
@@ -137,7 +163,9 @@ class MemSchema():
     def insert_record(self, table_type, record_type, af, ip, port, user, password, proto=None, fqn=None, alias_id=None):
         # Some servers like to point to local resources for trickery.
         if ip not in ("0", ""):
-            ip = ensure_ip_is_public(ip)
+            ensure_ip_is_public(ip)
+        else:
+            ip = None
 
         # Sanity tests.
         """
@@ -174,7 +202,7 @@ class MemSchema():
             "ip": ip,
             "port": port,
             "user": user,
-            "pass": password,
+            "password": password,
             "alias_id": alias_id,
             "status_id": status["id"],
             "group_id": None
@@ -273,11 +301,10 @@ class MemSchema():
         status["last_status"] = t
 
         # Remove from dealt queue.
-        if status == STATUS_AVAILABLE:
-            af = status["af"]
-            record = self.records[table_type][status["row_id"]]
-            group_id = record["group_id"]
-            self.work[table_type][af].move_work(group_id, STATUS_AVAILABLE)
+        record = self.records[table_type][status["row_id"]]
+        af = record["af"]
+        group_id = record["group_id"]
+        self.work[table_type][af].move_work(group_id, status_type)
 
     def update_table_ip(self, table_type, ip, alias_id, current_time):
         for record in self.records_by_aliases[alias_id]:
@@ -346,4 +373,31 @@ class MemSchema():
 
             self.add_work(records[0]["af"], SERVICES_TABLE_TYPE, records)
 
-   
+def compute_service_score(status, max_uptime_override=None):
+    """
+    Compute the quality score for a single service status.
+    
+    status: dict with keys:
+        - failed_tests
+        - test_no
+        - uptime
+        - max_uptime
+        - last_status
+    
+    max_uptime_override: optional, to replace status['max_uptime'] for calculation
+    """
+    failed_tests = float(status.get("failed_tests", 0))
+    test_no = float(status.get("test_no", 0))
+    uptime = float(status.get("uptime", 0))
+    max_uptime = float(status.get("max_uptime", 0)) if max_uptime_override is None else float(max_uptime_override)
+    
+    # Avoid division by zero
+    uptime_ratio = (uptime / max_uptime) if max_uptime > 0 else 1.0
+    
+    quality_score = (
+        (1.0 - failed_tests / (test_no + 1e-9)) * 
+        (0.5 * uptime_ratio + 0.5) *
+        (1.0 - math.exp(-test_no / 50.0))
+    )
+    
+    return quality_score

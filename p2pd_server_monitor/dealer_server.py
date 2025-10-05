@@ -56,10 +56,11 @@ edge case:
 
 import uvicorn
 import ast
-import aiosqlite
-import sqlite3
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, Body
 from p2pd import *
+from typing_extensions import TypedDict
+from typing import Any, List
+from pydantic import BaseModel
 from .dealer_utils import *
 from .db_init import *
 from .dealer_work import *
@@ -73,71 +74,78 @@ db = MemSchema()
 server_cache = []
 refresh_task = None
 
+class Service(TypedDict):
+    service_type: int
+    af: int
+    proto: int
+    ip: str
+    port: int
+    user: str | None
+    password: str | None
+    alias_id: int
+
+class StatusItem(BaseModel):
+    status_id: int
+    is_success: bool
+    t: int
+
+class Statuses(BaseModel):
+    statuses: List[StatusItem]
+
+class AliasUpdate(BaseModel):
+    alias_id: int
+    ip: str
+    current_time: int | None = None
+
 async def refresh_server_cache():
     global server_cache
     while True:
-        try:
-            servers = {}
-            async with aiosqlite.connect(DB_NAME) as db:
-                db.row_factory = aiosqlite.Row
+        # Init server list.
+        s = {}
+        for service_type in SERVICE_TYPES:
+            s[service_type] = {}
+            for af in VALID_AFS:
+                s[service_type][af] = {}
+                for proto in (UDP, TCP,):
+                    s[service_type][af][proto] = []
 
-                # Server listing per service type.
-                for service_type in SERVICE_TYPES:
-                    per_type = servers[TXTS[service_type]] = {}
-                    
-                    # Sub-divided by transport support.
-                    for proto in (UDP, TCP,):
-                        per_proto = per_type[TXTS["proto"][proto]] = {}
+        # This doesnt work since it doesnt take into account groups.
+        for status_id in db.statuses:
+            # Look at statuses for services imported.
+            status = db.statuses[status_id]
+            table_type = status["table_type"]
+            if table_type != SERVICES_TABLE_TYPE:
+                continue
 
-                        # Then by address family supported.
-                        for af in VALID_AFS:
-                            sql = """
-                            SELECT *
-                            FROM service_quality
-                            WHERE type = ? 
-                            AND proto = ? 
-                            AND af = ?
-                            ORDER BY group_score DESC, service_id ASC;
-                            """
-                            params = (service_type, proto, af,)
-                            async with db.execute(sql, params) as cursor:
-                                rows = [dict(r) for r in await cursor.fetchall()]
+            # Compute score for service.
+            score = compute_service_score(status)
+            row_id = status["row_id"]
+            row = db.records[table_type][row_id]
+            row["score"] = score
+            for k in ("uptime", "max_uptime", "last_success",):
+                row[k] = status[k]
 
-                            # Assign the list of groups to the nested structure
-                            per_af = per_proto[TXTS["af"][af]] = rows
+            # Record row in right category.
+            service_type = row["type"]
+            af = row["af"]
+            proto = row["proto"]
+            s[service_type][af][proto].append(row)
 
-            if servers:
-                server_cache = servers
-                server_cache["last_refresh"] = int(time.time())
-        except sqlite3.OperationalError:
-            pass
 
+        for service_type in SERVICE_TYPES:
+            for af in VALID_AFS:
+                for proto in (UDP, TCP,):
+                    s[service_type][af][proto].sort(key=lambda x: x["score"])
+
+        s["timestamp"] = int(time.time())
+        server_cache = s
         await asyncio.sleep(60)
 
 @app.on_event("startup")
 async def main():
     global refresh_task
-    """
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute("PRAGMA journal_mode=WAL;")
-        await db.execute("PRAGMA synchronous = 1;")
-        await db.execute('PRAGMA busy_timeout = 5000') # Wait up to 5 seconds
-        await db.commit()
-        try:
-            #await delete_all_data(db)
-            await init_settings_table(db)
-            #await insert_imports_test_data(db)
-            await db.commit()
-        except:
-            what_exception()
-    """
-
-    
     insert_main(db)
-    
     refresh_task = asyncio.create_task(refresh_server_cache())
-
-
 
 def localhost_only(request: Request):
     client_host = request.client.host
@@ -148,9 +156,6 @@ def localhost_only(request: Request):
 async def concurrency_test():
     # Wait for alias work to be done.
     print("Waiting for alias work to be done.")
-
-
-
     while 1:
         still_set = False
         for status_type in (STATUS_INIT, STATUS_AVAILABLE,):
@@ -168,8 +173,8 @@ async def concurrency_test():
     print("All aliases processed.")
 
 # Hands out work (servers to check) to worker processes.
-@app.get("/work", dependencies=[Depends(localhost_only)])
-def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY, table_type=None):
+@app.post("/work", dependencies=[Depends(localhost_only)])
+def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY, table_type=None) -> list[Union[RecordType, AliasType]]:
     # Indicate IPv4 / 6 support of worker process.
     if stack_type == DUEL_STACK:
         need_afs = VALID_AFS
@@ -221,24 +226,20 @@ def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR
 
     return []
 
-# Worker processes check in to signal status of work.
-@app.get("/complete", dependencies=[Depends(localhost_only)])
-def signal_complete_work(statuses):
-    # Return list of updated status IDs.
-    results = []
+@app.post("/complete", dependencies=[Depends(localhost_only)])
+def signal_complete_work(payload: Statuses):
+    results: List[int] = []
 
-    # Convert dict string back to Python.
-    statuses = ast.literal_eval(statuses)
-    for status_info in statuses:
-        ret = db.mark_complete(**status_info)
+    for status_info in payload.statuses:
+        ret = db.mark_complete(**status_info.dict())
         results.append(ret)
-    
+
     return results
 
-@app.get("/insert", dependencies=[Depends(localhost_only)])
-def insert_services(imports_list, status_id):
+@app.post("/insert", dependencies=[Depends(localhost_only)])
+def insert_services(imports_list: list[list[Service]], status_id: int):
     # Convert dict string back to Python.
-    imports_list = ast.literal_eval(imports_list)
+    #imports_list = ast.literal_eval(imports_list)
     for groups in imports_list:
         records = []
         alias_count = 0
@@ -266,21 +267,31 @@ def insert_services(imports_list, status_id):
 
     return []
 
-@app.get("/alias", dependencies=[Depends(localhost_only)])
-def update_alias(alias_id, ip, current_time=None):
-    ip = ensure_ip_is_public(ip)
-    current_time = current_time or int(time.time())
-    if alias_id not in db.records[ALIASES_TABLE_TYPE]:
-        return []
+@app.post("/alias", dependencies=[Depends(localhost_only)])
+def update_alias(data: AliasUpdate = Body(...)):
+    ip = ensure_ip_is_public(data.ip)
+    current_time = data.current_time or int(time.time())
+    alias_id = data.alias_id
 
-    # Update IP for the alias entry.
+    if alias_id not in db.records[ALIASES_TABLE_TYPE]:
+        raise Exception("Alias id not found.")
+    
     alias = db.records[ALIASES_TABLE_TYPE][alias_id]
     alias["ip"] = ip
 
-    for table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE,):
+    for table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE):
         db.update_table_ip(table_type, ip, alias_id, current_time)
 
     return [alias_id]
+
+
+@app.get("/list_aliases_len")
+async def list_aliases_len():
+    return len(db.records[ALIASES_TABLE_TYPE])
+
+@app.get("/list_aliases")
+async def list_aliases_len():
+    return db.records[ALIASES_TABLE_TYPE]
 
 # Show a listing of servers based on quality
 # Only public API is this one.

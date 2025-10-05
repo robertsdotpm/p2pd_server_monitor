@@ -57,5 +57,8 @@ def insert_main(db):
                     )
 
                     print("import id = ", record["id"])
+                    print(db.work)
+
+                    db.add_work(af, IMPORTS_TABLE_TYPE, [record])
                 except:
                     what_exception()
