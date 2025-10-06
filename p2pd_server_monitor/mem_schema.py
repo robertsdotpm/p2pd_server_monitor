@@ -182,10 +182,12 @@ class MemSchema():
 
     def insert_record(self, table_type, record_type, af, ip, port, user, password, proto=None, fqn=None, alias_id=None, score=0):
         # Some servers like to point to local resources for trickery.
-        if ip not in ("0", ""):
+        if ip not in ("0", "", None):
             ensure_ip_is_public(ip)
         else:
             ip = None
+            if fqn is None:
+                raise Exception("No way to resolve this IP for insert record.")
 
         # Sanity tests.
         """
@@ -230,14 +232,14 @@ class MemSchema():
         }).dict()
 
         # Check unique constraint.
-        unique_tup = frozenset([record_type, af, proto, ip, port])
+        unique_tup = frozenset([record_type, af, proto, fqn or ip, port])
         if table_type == SERVICES_TABLE_TYPE:
             unique_dest = self.unique_services
         else:
             unique_dest = self.unique_imports
 
         if unique_tup in unique_dest:
-            raise Exception("Row already exists " + str(unique_tup))
+            raise DuplicateRecordError("Row already exists " + str(unique_tup))
         else:
             unique_dest[unique_tup] = record
 
@@ -268,6 +270,7 @@ class MemSchema():
             user=user,
             password=password,
             alias_id=alias_id,
+            fqn=fqn,
             score=score
         )
 
@@ -347,7 +350,7 @@ class MemSchema():
 
             # 2) If import and its never been checked set new IP.
             if table_type == IMPORTS_TABLE_TYPE:
-                if not record["test_no"]:
+                if not status["test_no"]:
                     record["ip"] = ip
                     continue
 

@@ -93,7 +93,7 @@ async def stun_server_classifier(af, ip, port, nic):
     # Otherwise WAN IP lookups can contaminate NAT test results.
     # TODO: Perhaps the DB could have a special trigger for this?
     stun_infos  = [
-        (TCP, RFC3489, STUN_CHANGE_TYPE),
+        #(TCP, RFC3489, STUN_CHANGE_TYPE),
         (TCP, RFC5389, STUN_MAP_TYPE),
         (UDP, RFC5389, STUN_MAP_TYPE)
     ]
@@ -225,7 +225,7 @@ async def update_work_status(curl, status_ids, is_success):
     t = int(time.time())
     statuses = []
     for status_id in status_ids:
-        params = {"is_success": is_success, "status_id": status_id, "t": t}
+        params = {"is_success": int(is_success), "status_id": status_id, "t": t}
         statuses.append(params)
 
     if len(statuses):

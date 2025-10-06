@@ -14,6 +14,7 @@ file_names = ("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/impo
 
 
 def insert_main(db):
+    import_list = []
     for file_name in file_names:
         af = IP4 if "v4" in file_name else IP6
         import_type = None
@@ -39,26 +40,28 @@ def insert_main(db):
                 try:
                     line = line.strip()
                     parts = line.split(",")
-                    ip = parts[0]
+                    ip = None if parts[0] in ("0", "") else parts[0]
                     port = parts[1]
                     fqn = None
                     if len(parts) > 2:
                         fqn = parts[2]
-                        print("Trying fqn = ", fqn)
 
-                    record = db.insert_import(
-                        import_type=import_type,
-                        af=af,
-                        ip=ip,
-                        port=int(port),
-                        user=None,
-                        password=None,
-                        fqn=fqn
-                    )
+                    import_record = {
+                        "import_type": import_type,
+                        "af": int(af),
+                        "ip": ip,
+                        "port": int(port),
+                        "user": None,
+                        "password": None,
+                        "fqn": fqn
+                    }
 
-                    print("import id = ", record["id"])
-                    print(db.work)
-
+                    record = db.insert_import(**import_record)
+                    import_list.append(import_record)
                     db.add_work(af, IMPORTS_TABLE_TYPE, [record])
+                except DuplicateRecordError: # ignore really.
+                    log_exception()
                 except:
                     what_exception()
+
+    return import_list

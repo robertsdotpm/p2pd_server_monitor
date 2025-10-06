@@ -4,7 +4,7 @@ from p2pd import UDP, TCP, V4, V6
 DB_NAME = "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/monitor.sqlite3"
 WORKER_TIMEOUT = 120
 MONITOR_FREQUENCY = 60 * 60
-MONITOR_FREQUENCY = 60 * 10 # Just temp for testing.
+MONITOR_FREQUENCY = 60 * 60 # Just temp for testing.
 MAX_SERVER_DOWNTIME = 600
 
 ####################################################################################
@@ -64,3 +64,7 @@ SERVICES_TEST_DATA = [
 IMPORTS_TEST_DATA = [
     [None, STUN_MAP_TYPE, V4, "49.12.125.53", 3478, None, None],
 ]
+
+class DuplicateRecordError(KeyError):
+    """Raised when a duplicate key is inserted."""
+    pass

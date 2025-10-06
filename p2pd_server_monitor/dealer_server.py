@@ -91,7 +91,7 @@ class InsertPayload(BaseModel):
 
 class StatusItem(BaseModel):
     status_id: int
-    is_success: bool
+    is_success: int
     t: int
 
 class Statuses(BaseModel):
@@ -114,39 +114,45 @@ async def refresh_server_cache():
         # Init server list.
         s = {}
         for service_type in SERVICE_TYPES:
-            s[service_type] = {}
+            by_service = s[TXTS[service_type]] = {}
             for af in VALID_AFS:
-                s[service_type][af] = {}
+                by_af = by_service[TXTS["af"][af]] = {}
                 for proto in (UDP, TCP,):
-                    s[service_type][af][proto] = []
+                    by_proto = by_af[TXTS["proto"][proto]] = []
 
-        # This doesnt work since it doesnt take into account groups.
-        for status_id in db.statuses:
-            # Look at statuses for services imported.
-            status = db.statuses[status_id]
-            table_type = status["table_type"]
-            if table_type != SERVICES_TABLE_TYPE:
+        print(db.groups)
+        for group_id in db.groups:
+            
+            meta_group = db.groups[group_id]
+            if meta_group["table_type"] != SERVICES_TABLE_TYPE:
                 continue
 
-            # Compute score for service.
-            score = compute_service_score(status)
-            row_id = status["row_id"]
-            row = db.records[table_type][row_id]
-            row["score"] = score
-            for k in ("uptime", "max_uptime", "last_success",):
-                row[k] = status[k]
+            scores = []
+            group = copy.copy(meta_group["group"])
+            for record in group:
+                status = db.statuses[record["status_id"]]
+                for k in ("uptime", "max_uptime", "last_success",):
+                    record[k] = status[k]
 
-            # Record row in right category.
-            service_type = row["type"]
-            af = row["af"]
-            proto = row["proto"]
-            s[service_type][af][proto].append(row)
+                record["score"] = compute_service_score(status)
+                scores.append(record["score"])
+    
+            score_avg = sum(scores) / len(scores)
+            for record in group:
+                record["score"] = score_avg
 
+            service_type = TXTS[group[0]["type"]]
+            af = TXTS["af"][group[0]["af"]]
+            proto = TXTS["proto"][group[0]["proto"]]
+            s[service_type][af][proto].append(group)
 
         for service_type in SERVICE_TYPES:
             for af in VALID_AFS:
                 for proto in (UDP, TCP,):
-                    s[service_type][af][proto].sort(key=lambda x: x["score"])
+                    by_service = s[TXTS[service_type]]
+                    by_af = by_service[TXTS["af"][af]]
+                    by_proto = by_af[TXTS["proto"][proto]]
+                    by_proto.sort(key=lambda x: x[0]["score"])
 
         s["timestamp"] = int(time.time())
         server_cache = s
@@ -162,6 +168,10 @@ def localhost_only(request: Request):
     client_host = request.client.host
     if client_host not in ("127.0.0.1", "::1"):
         raise HTTPException(status_code=403, detail="Access forbidden")
+
+@app.get("/list_groups")
+async def list_groups():
+    return db.groups
     
 @app.get("/concurrency_test", dependencies=[Depends(localhost_only)])
 async def concurrency_test():
@@ -190,11 +200,6 @@ def get_work(request: WorkRequest):
     current_time = request.current_time or int(time.time())
     monitor_frequency = request.monitor_frequency or MONITOR_FREQUENCY
     table_type = request.table_type
-    
-    print(request.stack_type)
-    print(current_time)
-    print(monitor_frequency)
-    print(table_type)
 
     # Indicate IPv4 / 6 support of worker process.
     if stack_type == DUEL_STACK:
@@ -265,7 +270,7 @@ def insert_services(payload: InsertPayload):
             record = db.insert_service(**service.dict())
             records.append(record)
 
-            if service.alias_id:
+            if service.alias_id is not None:
                 alias_count += 1
 
         # STUN change servers should have all or no alias.
@@ -300,7 +305,7 @@ def update_alias(data: AliasUpdate):
     for table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE):
         db.update_table_ip(table_type, ip, alias_id, current_time)
 
-    return [alias_id]
+    return []
 
 @app.get("/list_aliases_len")
 async def list_aliases_len():
