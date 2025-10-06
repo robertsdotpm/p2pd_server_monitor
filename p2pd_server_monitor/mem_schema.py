@@ -259,7 +259,6 @@ class MemSchema():
         else:
             alias_id = None
 
-        
         return self.insert_record(
             table_type=IMPORTS_TABLE_TYPE,
             record_type=import_type,
@@ -290,7 +289,6 @@ class MemSchema():
 
     def mark_complete(self, is_success, status_id, t=None):
         t = t or int(time.time())
-
         status_type = STATUS_AVAILABLE
         if status_id not in self.statuses:
             raise Exception("could not load status row %s" % (status_id,))
@@ -331,29 +329,42 @@ class MemSchema():
 
     def update_table_ip(self, table_type, ip, alias_id, current_time):
         for record in self.records_by_aliases[alias_id]:
+            # Skip records that don't match the table type.
             if record["table_type"] != table_type:
                 continue
 
+            # SKip disabled records.
             status = self.statuses[record["status_id"]]
             if status["status"] == STATUS_DISABLED:
                 continue
 
-            print("update table ip = ", record)
-
-            cond_one = not status["last_success"] and \
-                not status["last_uptime"] and \
-                status["test_no"] >= 2
-
-            cond_two = status["last_success"] and \
-                ((current_time - status["last_uptime"]) > MAX_SERVER_DOWNTIME * 2)
-
-            print("cond one = ", cond_one)
-            print("cond two = ", cond_two)
-
-            if not (cond_one or cond_two):
+            # 1) If current IP is invalid set new IP.
+            try:
+                ensure_ip_is_public(record["ip"])
+            except:
+                record["ip"] = ip
                 continue
 
-            record["ip"] = ip
+            # 2) If import and its never been checked set new IP.
+            if table_type == IMPORTS_TABLE_TYPE:
+                if not record["test_no"]:
+                    record["ip"] = ip
+                    continue
+
+            # 3) Otherwise only update if there's a period of downtime.
+            # This prevents servers from constantly changing IPs.
+            cond_one = cond_two = False
+            if not status["last_success"] and not status["last_uptime"]:
+                if status["test_no"] >= 2:
+                    cond_one = True
+            if status["last_success"]:
+                elapsed = current_time - status["last_uptime"]
+                if elapsed > (MAX_SERVER_DOWNTIME * 2):
+                    cond_two = True
+
+            # Only set ip if there's a period of downtime.
+            if cond_one or cond_two:
+                record["ip"] = ip
 
     def insert_imports_test_data(self, test_data=IMPORTS_TEST_DATA):
         for info in test_data:
@@ -397,18 +408,6 @@ class MemSchema():
             self.add_work(records[0]["af"], SERVICES_TABLE_TYPE, records)
 
 def compute_service_score(status, max_uptime_override=None):
-    """
-    Compute the quality score for a single service status.
-    
-    status: dict with keys:
-        - failed_tests
-        - test_no
-        - uptime
-        - max_uptime
-        - last_status
-    
-    max_uptime_override: optional, to replace status['max_uptime'] for calculation
-    """
     failed_tests = float(status.get("failed_tests", 0))
     test_no = float(status.get("test_no", 0))
     uptime = float(status.get("uptime", 0))

@@ -102,14 +102,6 @@ class AliasUpdate(BaseModel):
     ip: str
     current_time: int | None = None
 
-"""
-class WorkRequest(BaseModel):
-    stack_type: Optional[int | None] = DUEL_STACK
-    current_time: Optional[int] = None
-    monitor_frequency: Optional[int] = MONITOR_FREQUENCY
-    table_type: Optional[int | None] = None
-"""
-
 class WorkRequest(BaseModel):
     stack_type: int | None
     table_type: int | None
@@ -257,7 +249,6 @@ def get_work(request: WorkRequest):
 @app.post("/complete", dependencies=[Depends(localhost_only)])
 def signal_complete_work(payload: Statuses):
     results: List[int] = []
-
     for status_info in payload.statuses:
         ret = db.mark_complete(**status_info.dict())
         results.append(ret)
@@ -310,7 +301,6 @@ def update_alias(data: AliasUpdate):
         db.update_table_ip(table_type, ip, alias_id, current_time)
 
     return [alias_id]
-
 
 @app.get("/list_aliases_len")
 async def list_aliases_len():
