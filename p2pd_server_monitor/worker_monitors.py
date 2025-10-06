@@ -134,7 +134,8 @@ async def imports_monitor(curl, pending_insert):
                 "port": int(server[4]),
                 "user": server[5],
                 "password": server[6],
-                "alias_id": pending_insert[0]["alias_id"]
+                "alias_id": pending_insert[0]["alias_id"],
+                "score": 0
             })
 
         imports_list.append(services)
@@ -146,8 +147,9 @@ async def imports_monitor(curl, pending_insert):
     # Otherwise do imports.
     params = {
         "imports_list": imports_list,
-        "status_id": pending_insert[0]["status_id"],
+        "status_id": int(pending_insert[0]["status_id"]),
     }
+    print(params)
     await retry_curl_on_locked(curl, params, "/insert")
 
     # Same return time but update status handled by /insert.

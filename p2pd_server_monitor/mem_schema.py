@@ -30,7 +30,7 @@ for record in dealt:
 import math
 import time
 from typing_extensions import TypedDict
-from typing import Any, List
+from typing import Any, List, Union
 from pydantic import BaseModel
 from .dealer_defs import *
 from .work_queue import *
@@ -41,8 +41,8 @@ class AliasType(BaseModel):
     af: int
     fqn: str
     ip: str | None
-    group_id: int
-    status_id: int
+    group_id: int | None
+    status_id: int | None
     table_type: int
 
 class RecordType(BaseModel):
@@ -57,7 +57,27 @@ class RecordType(BaseModel):
     password: str | None
     alias_id: int | None
     status_id: int
-    group_id: int
+    group_id: int | None
+    score: int
+
+class StatusType(BaseModel):
+    id: int
+    row_id: int
+    table_type: int
+    status: int
+    last_status: int
+    test_no: int
+    failed_tests: int
+    last_success: int
+    last_uptime: int
+    uptime: int
+    max_uptime: int
+
+class MetaGroup(BaseModel):
+    id: int
+    table_type: int
+    af: int
+    group: list[Union[RecordType, AliasType]]
 
 class MemSchema():
     def __init__(self):
@@ -105,7 +125,7 @@ class MemSchema():
 
     def init_status_row(self, row_id, table_type):
         status_id = len(self.statuses)
-        status = {
+        status = StatusType(**{
             "id": status_id,
             "row_id": row_id,
             "table_type": table_type,
@@ -117,14 +137,14 @@ class MemSchema():
             "last_uptime": 0,
             "uptime": 0,
             "max_uptime": 0
-        }
+        }).dict()
 
         self.statuses[status_id] = status
         return status
 
     def record_alias(self, af, fqn, ip=None):
         alias_id = len(self.records[ALIASES_TABLE_TYPE])
-        alias = {
+        alias = AliasType(**{
             "id": alias_id,
             "af": af,
             "fqn": fqn,
@@ -132,7 +152,7 @@ class MemSchema():
             "group_id": None,
             "status_id": None,
             "table_type": ALIASES_TABLE_TYPE
-        }
+        }).dict()
 
         # Check unique constraint.
         unique_tup = frozenset([af, fqn])
@@ -160,7 +180,7 @@ class MemSchema():
         else:
             return self.record_alias(af, fqn, ip=ip)
 
-    def insert_record(self, table_type, record_type, af, ip, port, user, password, proto=None, fqn=None, alias_id=None):
+    def insert_record(self, table_type, record_type, af, ip, port, user, password, proto=None, fqn=None, alias_id=None, score=0):
         # Some servers like to point to local resources for trickery.
         if ip not in ("0", ""):
             ensure_ip_is_public(ip)
@@ -193,7 +213,7 @@ class MemSchema():
         status = self.init_status_row(row_id, table_type)
 
         # Record imports record.
-        record = {
+        record = RecordType(**{
             "id": row_id,
             "table_type": table_type,
             "type": record_type,
@@ -205,8 +225,9 @@ class MemSchema():
             "password": password,
             "alias_id": alias_id,
             "status_id": status["id"],
-            "group_id": None
-        }
+            "group_id": None,
+            "score": score
+        }).dict()
 
         # Check unique constraint.
         unique_tup = frozenset([record_type, af, proto, ip, port])
@@ -229,7 +250,7 @@ class MemSchema():
 
         return record
 
-    def insert_import(self, import_type, af, ip, port, user=None, password=None, fqn=None):
+    def insert_import(self, import_type, af, ip, port, user=None, password=None, fqn=None, score=0):
         # Create alias record.
         af = int(af)
         if fqn:
@@ -247,10 +268,11 @@ class MemSchema():
             port=port,
             user=user,
             password=password,
-            alias_id=alias_id
+            alias_id=alias_id,
+            score=score
         )
 
-    def insert_service(self, service_type, af, proto, ip, port, user, password, alias_id):
+    def insert_service(self, service_type, af, proto, ip, port, user, password, alias_id, score=0):
         af = int(af)
         proto = int(proto)
         return self.insert_record(
@@ -262,7 +284,8 @@ class MemSchema():
             user=user,
             password=password,
             proto=proto,
-            alias_id=alias_id
+            alias_id=alias_id,
+            score=score
         )
 
     def mark_complete(self, is_success, status_id, t=None):

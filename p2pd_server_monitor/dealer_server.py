@@ -59,7 +59,7 @@ import ast
 from fastapi import FastAPI, Request, HTTPException, Depends, Body
 from p2pd import *
 from typing_extensions import TypedDict
-from typing import Any, List
+from typing import Any, List, Optional
 from pydantic import BaseModel
 from .dealer_utils import *
 from .db_init import *
@@ -74,7 +74,7 @@ db = MemSchema()
 server_cache = []
 refresh_task = None
 
-class Service(TypedDict):
+class Service(BaseModel):
     service_type: int
     af: int
     proto: int
@@ -82,7 +82,12 @@ class Service(TypedDict):
     port: int
     user: str | None
     password: str | None
-    alias_id: int
+    alias_id: int | None
+    score: int
+
+class InsertPayload(BaseModel):
+    imports_list: List[List[Service]]
+    status_id: int
 
 class StatusItem(BaseModel):
     status_id: int
@@ -96,6 +101,20 @@ class AliasUpdate(BaseModel):
     alias_id: int
     ip: str
     current_time: int | None = None
+
+"""
+class WorkRequest(BaseModel):
+    stack_type: Optional[int | None] = DUEL_STACK
+    current_time: Optional[int] = None
+    monitor_frequency: Optional[int] = MONITOR_FREQUENCY
+    table_type: Optional[int | None] = None
+"""
+
+class WorkRequest(BaseModel):
+    stack_type: int | None
+    table_type: int | None
+    current_time: int | None
+    monitor_frequency: int | None
 
 async def refresh_server_cache():
     global server_cache
@@ -174,7 +193,17 @@ async def concurrency_test():
 
 # Hands out work (servers to check) to worker processes.
 @app.post("/work", dependencies=[Depends(localhost_only)])
-def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR_FREQUENCY, table_type=None) -> list[Union[RecordType, AliasType]]:
+def get_work(request: WorkRequest):
+    stack_type = request.stack_type
+    current_time = request.current_time or int(time.time())
+    monitor_frequency = request.monitor_frequency or MONITOR_FREQUENCY
+    table_type = request.table_type
+    
+    print(request.stack_type)
+    print(current_time)
+    print(monitor_frequency)
+    print(table_type)
+
     # Indicate IPv4 / 6 support of worker process.
     if stack_type == DUEL_STACK:
         need_afs = VALID_AFS
@@ -188,7 +217,6 @@ def get_work(stack_type=DUEL_STACK, current_time=None, monitor_frequency=MONITOR
         table_types = TABLE_TYPES
 
     # Get oldest work by table type and client AF preference.
-    current_time = current_time or int(time.time())
     for table_choice in table_types:
         for need_af in need_afs:
             """
@@ -237,23 +265,22 @@ def signal_complete_work(payload: Statuses):
     return results
 
 @app.post("/insert", dependencies=[Depends(localhost_only)])
-def insert_services(imports_list: list[list[Service]], status_id: int):
-    # Convert dict string back to Python.
-    #imports_list = ast.literal_eval(imports_list)
-    for groups in imports_list:
+def insert_services(payload: InsertPayload):
+    for groups in payload.imports_list:
         records = []
         alias_count = 0
         for service in groups:
-            record = db.insert_service(**service)
+            # Convert Pydantic model to dict
+            record = db.insert_service(**service.dict())
             records.append(record)
 
-            if service["alias_id"]:
+            if service.alias_id:
                 alias_count += 1
 
         # STUN change servers should have all or no alias.
         if records[0]["type"] == STUN_CHANGE_TYPE:
-            if alias_count not in (0, 4,):
-                # TODO: delete created records.
+            if alias_count not in (0, 4):
+                # TODO: delete created records
                 raise Exception("STUN change servers need even aliases")
 
         db.add_work(records[0]["af"], SERVICES_TABLE_TYPE, records)
@@ -261,14 +288,14 @@ def insert_services(imports_list: list[list[Service]], status_id: int):
     # Only allocate imports work once.
     # This deletes the associated status record. 
     db.mark_complete(
-        1 if len(imports_list) else 0,
-        int(status_id)
+        1 if len(payload.imports_list) else 0,
+        payload.status_id
     )
 
     return []
 
 @app.post("/alias", dependencies=[Depends(localhost_only)])
-def update_alias(data: AliasUpdate = Body(...)):
+def update_alias(data: AliasUpdate):
     ip = ensure_ip_is_public(data.ip)
     current_time = data.current_time or int(time.time())
     alias_id = data.alias_id

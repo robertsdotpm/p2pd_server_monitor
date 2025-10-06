@@ -44,7 +44,6 @@ async def worker(nic, curl, init_work=None, table_type=None):
             return NO_WORK, []
 
         print("got work = ", work)
-        input()
 
         is_success = 0
         status_ids = [w["status_id"] for w in work if "status_id" in w]
@@ -141,15 +140,14 @@ async def main(nic=None):
     await process_work(
         nic,
         curl,
-        table_type=ALIASES_TABLE_TYPE,
-        stagger=True
+        table_type=ALIASES_TABLE_TYPE
     )
 
     # Give time for all DNS requests to finish.
     await asyncio.sleep(3)
 
     # Keep processing alias work until done.
-    #await process_work(nic, curl, stagger=True)
+    await process_work(nic, curl, stagger=True)
 
     # Give time for event loop to finish.
     await asyncio.sleep(2)

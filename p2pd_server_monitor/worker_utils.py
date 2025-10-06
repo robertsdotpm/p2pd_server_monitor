@@ -181,6 +181,7 @@ async def retry_curl_on_locked(curl, params, endpoint, retries=3):
                 continue
 
             # Return output.
+            print(response.json())
             return response.json()
 
 async def fetch_work_list(curl, table_type=None):
@@ -188,7 +189,12 @@ async def fetch_work_list(curl, table_type=None):
     work = []
 
     # Fetch work from dealer server.
-    params = {"stack_type": int(nic.stack), "table_type": table_type}
+    params = {
+        "stack_type": int(nic.stack),
+        "table_type": table_type,
+        "current_time": None,
+        "monitor_frequency": None
+    }
     resp = await retry_curl_on_locked(curl, params, "/work")
     if resp is None:
         return INVALID_SERVER_RESPONSE
