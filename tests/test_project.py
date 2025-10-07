@@ -59,7 +59,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         asyncio.run(cls.init_interface())
 
     async def asyncSetUp(self):
-        db.delete_all()
+        db.setup_db()
         self.db = await aiosqlite.connect(DB_NAME)
         self.db.row_factory = aiosqlite.Row
         await delete_all_data(self.db)

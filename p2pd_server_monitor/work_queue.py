@@ -16,6 +16,7 @@ over memory addresses as you would have to update each offset for a
 delete. This is a very neat trick used by high performance schedulers.
 """
 
+from typing import Hashable, Any
 from .dealer_defs import *
 from .linked_list import *
 
@@ -31,20 +32,28 @@ class WorkQueue:
         # work_id -> (queue_name, node reference)
         self.index = {} 
 
-    def add_work(self, work_id, payload, queue_name):
+    def add_work(self, work_id: Hashable, payload: Any, queue_name: int):
+        # Avoid overwriting pre-existing work.
+        if work_id in self.index:
+            raise KeyError(f"add_work: Work ID {work_id} already added.")
+        
         node = self.queues[queue_name].append((work_id, payload))
         self.index[work_id] = (queue_name, node)
 
-    def move_work(self, work_id, to_queue):
+    def move_work(self, work_id: Hashable, queue_name: int):
+        # Work doesn't exist.
+        if work_id not in self.index:
+            raise KeyError(f"move_work: Work ID {work_id} doesnt exist.")
+
         # Remove from existing linked-list.
         from_queue, node = self.index[work_id]
         self.queues[from_queue].remove(node)
 
         # Add to end of target linked_list.
-        new_node = self.queues[to_queue].append(node.value)
-        self.index[work_id] = (to_queue, new_node)
+        new_node = self.queues[queue_name].append(node.value)
+        self.index[work_id] = (queue_name, new_node)
 
-    def remove_work(self, work_id):
+    def remove_work(self, work_id: Hashable):
         queue_name, node = self.index.pop(work_id)
         self.queues[queue_name].remove(node)
 

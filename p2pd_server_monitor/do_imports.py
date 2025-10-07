@@ -1,6 +1,4 @@
 import os
-import asyncio
-import aiosqlite
 from p2pd import *
 from .dealer_utils import *
 from .db_init import *
