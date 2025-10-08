@@ -217,40 +217,41 @@ class MemSchema():
         # Delete target row if status is for an imports.
         # We only want imports work to be done once.
         status = self.statuses[status_id]
-        table_type = status["table_type"]
+        table_type = status.table_type
         if table_type == IMPORTS_TABLE_TYPE:
             status_type = STATUS_DISABLED
 
         # Remove from dealt queue.
-        record = self.records[table_type][status["row_id"]]
-        af = record["af"]
-        group_id = record["group_id"]
+        record = self.records[table_type][status.row_id]
+        af = record.af
+        group_id = record.group_id
 
         # Try to move work to available -- throw exception if not exist.
         self.work[table_type][af].move_work(group_id, status_type)
 
         # Update stats for success.
         if is_success:
-            if not status["last_uptime"]:
+            if not status.last_uptime:
                 change = 0
             else:
-                change = max(0, t - status["last_uptime"])
+                change = max(0, t - status.last_uptime)
 
-            status["uptime"] += change
-            if status["uptime"] > status["max_uptime"]:
-                status["max_uptime"] = status["uptime"]
+            status.uptime += change
+            if status.uptime > status.max_uptime:
+                status.max_uptime = status.uptime
 
-            status["last_uptime"] = t
-            status["last_success"] = t
+            status.last_uptime = t
+            status.last_success = t
 
         # Update stats for failure.
         if not is_success:
-            status["failed_tests"] += 1
-            status["uptime"] = 0
+            status.failed_tests += 1
+            status.uptime = 0
         
-        status["status"] = status_type
-        status["test_no"] += 1
-        status["last_status"] = t
+        status.status = status_type
+        status.test_no += 1
+        status.last_status = t
+
 
     def update_table_ip(self, table_type: int, ip: str, alias_id: int, current_time: int):
         for record in self.records_by_aliases[alias_id]:

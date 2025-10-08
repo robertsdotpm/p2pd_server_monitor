@@ -64,7 +64,16 @@ async def worker(nic, curl, init_work=None, table_type=None):
         ))
 
         if table_type == IMPORTS_TABLE_TYPE:
-            is_success = await imports_monitor(curl, work)
+            imports_list = await imports_monitor(nic, work)
+
+            # Otherwise do imports.
+            params = {
+                "imports_list": imports_list,
+                "status_id": int(pending_insert[0]["status_id"]),
+            }
+            print(params)
+            await retry_curl_on_locked(curl, params, "/insert")
+
             if not is_success:
                 print("Offline -- not importing")
             else:

@@ -128,54 +128,56 @@ class WorkRequest(BaseModel):
     current_time: int | None
     monitor_frequency: int | None
 
+def build_server_list():
+    # Init server list.
+    s = {}
+    for service_type in SERVICE_TYPES:
+        by_service = s[TXTS[service_type]] = {}
+        for af in VALID_AFS:
+            by_af = by_service[TXTS["af"][af]] = {}
+            for proto in (UDP, TCP,):
+                by_proto = by_af[TXTS["proto"][proto]] = []
+
+
+    for group_id in db.groups:
+        meta_group = db.groups[group_id]
+        if meta_group.table_type != SERVICES_TABLE_TYPE:
+            continue
+
+        scores = []
+        group = group_to_dict(meta_group.group)
+        for record in group:
+            status = db.statuses[record["status_id"]].dict()
+            for k in ("uptime", "max_uptime", "last_success",):
+                record[k] = status[k]
+
+            record["score"] = compute_service_score(status)
+            scores.append(record["score"])
+
+        score_avg = sum(scores) / len(scores)
+        for record in group:
+            record["score"] = score_avg
+
+        service_type = TXTS[group[0]["type"]]
+        af = TXTS["af"][group[0]["af"]]
+        proto = TXTS["proto"][group[0]["proto"]]
+        s[service_type][af][proto].append(group)
+
+    for service_type in SERVICE_TYPES:
+        for af in VALID_AFS:
+            for proto in (UDP, TCP,):
+                by_service = s[TXTS[service_type]]
+                by_af = by_service[TXTS["af"][af]]
+                by_proto = by_af[TXTS["proto"][proto]]
+                by_proto.sort(key=lambda x: x[0]["score"])
+
+    s["timestamp"] = int(time.time())
+    return s
+
 async def refresh_server_cache():
     global server_cache
     while True:
-        # Init server list.
-        s = {}
-        for service_type in SERVICE_TYPES:
-            by_service = s[TXTS[service_type]] = {}
-            for af in VALID_AFS:
-                by_af = by_service[TXTS["af"][af]] = {}
-                for proto in (UDP, TCP,):
-                    by_proto = by_af[TXTS["proto"][proto]] = []
-
-        print(db.groups)
-        for group_id in db.groups:
-            
-            meta_group = db.groups[group_id]
-            if meta_group["table_type"] != SERVICES_TABLE_TYPE:
-                continue
-
-            scores = []
-            group = copy.copy(meta_group["group"])
-            for record in group:
-                status = db.statuses[record["status_id"]]
-                for k in ("uptime", "max_uptime", "last_success",):
-                    record[k] = status[k]
-
-                record["score"] = compute_service_score(status)
-                scores.append(record["score"])
-    
-            score_avg = sum(scores) / len(scores)
-            for record in group:
-                record["score"] = score_avg
-
-            service_type = TXTS[group[0]["type"]]
-            af = TXTS["af"][group[0]["af"]]
-            proto = TXTS["proto"][group[0]["proto"]]
-            s[service_type][af][proto].append(group)
-
-        for service_type in SERVICE_TYPES:
-            for af in VALID_AFS:
-                for proto in (UDP, TCP,):
-                    by_service = s[TXTS[service_type]]
-                    by_af = by_service[TXTS["af"][af]]
-                    by_proto = by_af[TXTS["proto"][proto]]
-                    by_proto.sort(key=lambda x: x[0]["score"])
-
-        s["timestamp"] = int(time.time())
-        server_cache = s
+        server_cache = build_server_list()
         await asyncio.sleep(60)
 
 @app.on_event("startup")
@@ -213,6 +215,8 @@ async def concurrency_test():
 
     print("All aliases processed.")
 
+
+
 # Hands out work (servers to check) to worker processes.
 @app.post("/work", dependencies=[Depends(localhost_only)])
 def get_work(request: WorkRequest):
@@ -245,17 +249,17 @@ def get_work(request: WorkRequest):
             for status_type in (STATUS_INIT, STATUS_AVAILABLE, STATUS_DEALT,):
                 for group_id, meta_group in wq.queues[status_type]:
                     assert(meta_group)
-                    group = meta_group["group"]
+                    group = meta_group.group
 
                     # Never been allocated so safe to hand out.
                     if status_type == STATUS_INIT:
                         wq.move_work(group_id, STATUS_DEALT)
-                        return group
+                        return group_to_dict(group)
 
                     # Work is moved back to available but don't do it too soon.
                     # Statuses are bulk updated for entries in a group.
-                    status = db.statuses[group[0]["status_id"]]
-                    elapsed = current_time - status["last_status"]
+                    status = db.statuses[group[0].status_id]
+                    elapsed = current_time - status.last_status
                     if status_type != STATUS_DEALT:
                         if elapsed < monitor_frequency:
                             break
@@ -267,7 +271,7 @@ def get_work(request: WorkRequest):
 
                     # Otherwise: allocate it as work.
                     wq.move_work(group_id, STATUS_DEALT)
-                    return group
+                    return group_to_dict(group)
 
     return []
 
@@ -294,12 +298,12 @@ def insert_services(payload: InsertPayload):
                 alias_count += 1
 
         # STUN change servers should have all or no alias.
-        if records[0]["type"] == STUN_CHANGE_TYPE:
+        if records[0].type == STUN_CHANGE_TYPE:
             if alias_count not in (0, 4):
                 # TODO: delete created records
                 raise Exception("STUN change servers need even aliases")
 
-        db.add_work(records[0]["af"], SERVICES_TABLE_TYPE, records)
+        db.add_work(records[0].af, SERVICES_TABLE_TYPE, records)
 
     # Only allocate imports work once.
     # This deletes the associated status record. 

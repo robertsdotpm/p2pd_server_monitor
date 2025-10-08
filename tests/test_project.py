@@ -771,7 +771,9 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         fqn_map = {
             "stun.1cbit.ru": "212.53.40.43",
             "stun.voipgate.com": "185.125.180.70",
-            "stun.zepter.ru": "12.53.40.43",
+
+            # Duplicate.
+            "stun.zepter.ru": "212.53.40.43",
             "stun.mixvoip.com": "185.125.180.70",
             "stun.gmx.de": "212.227.67.34",
 
@@ -779,6 +781,13 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "stun.peethultra.be": "81.82.206.117",
             "stun.3deluxe.de": "217.91.243.229",
         }
+
+        """
+        Some servers may have fload prevention that drops queries to the same addr.
+        """
+        [[{'service_type': 3, 'af': 2, 'proto': 1, 'ip': '212.53.40.43', 'port': 3478, 'user': None, 'password': None, 'alias_id': 1, 'score': 0}]]
+        [[{'service_type': 3, 'af': 2, 'proto': 1, 'ip': '212.53.40.43', 'port': 3478, 'user': None, 'password': None, 'alias_id': 2, 'score': 0}]]
+
 
         """
         Is it possible I introduced an edge case with duplicate names.
@@ -822,17 +831,80 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         These IPs apparently cant be imported?
         """
         broken_stun = {'87.129.12.229', '92.205.106.161', '188.40.203.74', '81.83.12.46', '195.145.93.141', '212.53.40.43', '34.74.124.204', '95.216.145.84', '80.156.214.187', '81.3.27.44', '62.72.83.10', '217.91.243.229', '172.233.245.118', '69.20.59.115', '91.212.41.85', '80.155.54.123', '90.145.158.66', '212.53.40.40', '129.153.212.128', '91.213.98.54', '212.144.246.197', '193.22.17.97', '81.82.206.117'}
+
+
         work_req = WorkRequest(**{
             "stack_type": None,
-            "table_type": None,
+            "table_type": IMPORTS_TABLE_TYPE,
             "current_time": None,
             "monitor_frequency": None
         })
 
+        """
+skipping duplicate
+imports_list=[[Service(service_type=3, af=2, proto=1, ip='212.53.40.43', port=3478, user=None, password=None, alias_id=2, score=0)]] status_id=5
+skipping duplicate
+imports_list=[[Service(service_type=4, af=2, proto=2, ip='185.125.180.70', port=3478, user=None, password=None, alias_id=4, score=0), Service(service_type=4, af=2, proto=2, ip='185.125.180.70', port=3479, user=None, password=None, alias_id=4, score=0), Service(service_type=4, af=2, proto=2, ip='185.125.180.71', port=3478, user=None, password=None, alias_id=4, score=0), Service(service_type=4, af=2, proto=2, ip='185.125.180.71', port=3479, user=None, password=None, alias_id=4, score=0)], [Service(service_type=3, af=2, proto=1, ip='185.125.180.70', port=3478, user=None, password=None, alias_id=4, score=0)], [Service(service_type=3, af=2, proto=2, ip='185.125.180.70', port=3478, user=None, password=None, alias_id=4, score=0)]] status_id=9
+skipping duplicate
+imports_list=[[Service(service_type=3, af=2, proto=1, ip='212.53.40.43', port=3478, user=None, password=None, alias_id=None, score=0)]] status_id=27
+skipping duplicate
+imports_list=[[Service(service_type=3, af=2, proto=1, ip='81.82.206.117', port=3478, user=None, password=None, alias_id=5, score=0)], [Service(service_type=3, af=2, proto=2, ip='81.82.206.117', port=3478, user=None, password=None, alias_id=5, score=0)]] status_id=34
+skipping duplicate
+imports_list=[[Service(service_type=3, af=2, proto=1, ip='217.91.243.229', port=3478, user=None, password=None, alias_id=6, score=0)], [Service(service_type=3, af=2, proto=2, ip='217.91.243.229', port=3478, user=None, password=None, alias_id=6, score=0)]] status_id=36
 
-        return
+        """
+    
         while work := get_work(work_req):
-            print(work)
+            task = work[0]
+            if task["table_type"] != IMPORTS_TABLE_TYPE:
+                print("Got unwanted work type !", task["table_type"])
+                continue
+
+            out = await imports_monitor(self.nic, work)
+
+            if not out:
+                print(work)
+                print("out empty skipping")
+
+            req = InsertPayload(**{
+                "imports_list": out,
+                "status_id": int(work[0]["status_id"]),
+            })
+
+            try:
+                insert_services(req)
+            except DuplicateRecordError:
+                print("skipping duplicate")
+                print(req)
+
+        for ip in broken_stun:
+            found = False
+            for record_id in db.records[SERVICES_TABLE_TYPE]:
+                record = db.records[SERVICES_TABLE_TYPE][record_id]
+
+                if ip == record.ip:
+                    found = True
+                    break
+
+            if not found:
+                print("Broken IP not inserted ", ip)
+
+        server_list = build_server_list()
+        for record_id in db.records[SERVICES_TABLE_TYPE]:
+            record = db.records[SERVICES_TABLE_TYPE][record_id]
+
+            found = False
+            for service_type in ("STUN(see_ip)", "STUN(test_nat)",):
+                for af in ("IPv4", "IPv6",):
+                    for proto in ("UDP", "TCP",):
+                        hey = server_list[service_type][af][proto]
+                        for group in hey:
+                            for entry in group:
+                                if entry["ip"] == record.ip:
+                                    found = True
+
+            if not found:
+                print(record)
 
 
         """

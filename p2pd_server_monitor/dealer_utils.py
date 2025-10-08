@@ -5,6 +5,8 @@ from typing import Union, Any
 from p2pd import *
 from .dealer_defs import *
 
+group_to_dict = lambda x: [v.dict() for v in x]
+
 class PrettyJSONResponse(JSONResponse):
     def render(self, content: any) -> bytes:
         return json.dumps(

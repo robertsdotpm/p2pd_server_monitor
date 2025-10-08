@@ -113,8 +113,7 @@ async def service_monitor(nic, work):
     
     return is_success
 
-async def imports_monitor(curl, pending_insert):
-    nic = curl.route.interface
+async def imports_monitor(nic, pending_insert):
     validated_lists = await validate_service_import(
         nic,
         pending_insert[0],
@@ -140,17 +139,13 @@ async def imports_monitor(curl, pending_insert):
 
         imports_list.append(services)
 
+    return imports_list
+
     # Nothing to import.
     if not imports_list:
         return 0
 
-    # Otherwise do imports.
-    params = {
-        "imports_list": imports_list,
-        "status_id": int(pending_insert[0]["status_id"]),
-    }
-    print(params)
-    await retry_curl_on_locked(curl, params, "/insert")
+
 
     # Same return time but update status handled by /insert.
     return 1
