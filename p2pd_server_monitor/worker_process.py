@@ -69,7 +69,7 @@ async def worker(nic, curl, init_work=None, table_type=None):
             # Otherwise do imports.
             params = {
                 "imports_list": imports_list,
-                "status_id": int(pending_insert[0]["status_id"]),
+                "status_id": int(work[0]["status_id"]),
             }
             print(params)
             await retry_curl_on_locked(curl, params, "/insert")
