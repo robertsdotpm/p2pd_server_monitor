@@ -85,7 +85,7 @@ class MemSchema():
         })
 
         # Check unique constraint.
-        unique_tup = frozenset([af, fqn])
+        unique_tup = (af, fqn,)
         if unique_tup in self.unique_alias:
             raise KeyError("Alias already exists" + str(unique_tup))
         else:
@@ -104,7 +104,7 @@ class MemSchema():
         return alias
 
     def fetch_or_insert_alias(self, af: int, fqn: str, ip=None):
-        unique_tup = frozenset([af, fqn])
+        unique_tup = (af, fqn,)
         if unique_tup in self.unique_alias:
             return self.unique_alias[unique_tup]
         else:
@@ -149,7 +149,7 @@ class MemSchema():
         })
 
         # Check unique constraint.
-        unique_tup = frozenset([record_type, af, proto, fqn or ip, port])
+        unique_tup = (record_type, af, proto, fqn or ip, port,)
         if table_type == SERVICES_TABLE_TYPE:
             unique_dest = self.unique_services
         else:
@@ -255,41 +255,41 @@ class MemSchema():
     def update_table_ip(self, table_type: int, ip: str, alias_id: int, current_time: int):
         for record in self.records_by_aliases[alias_id]:
             # Skip records that don't match the table type.
-            if record["table_type"] != table_type:
+            if record.table_type != table_type:
                 continue
 
             # SKip disabled records.
-            status = self.statuses[record["status_id"]]
-            if status["status"] == STATUS_DISABLED:
+            status = self.statuses[record.status_id]
+            if status.status == STATUS_DISABLED:
                 continue
 
             # 1) If current IP is invalid set new IP.
             try:
-                ensure_ip_is_public(record["ip"])
+                ensure_ip_is_public(record.ip)
             except:
-                record["ip"] = ip
+                record.ip = ip
                 continue
 
             # 2) If import and its never been checked set new IP.
             if table_type == IMPORTS_TABLE_TYPE:
-                if not status["test_no"]:
-                    record["ip"] = ip
+                if not status.test_no:
+                    record.ip = ip
                     continue
 
             # 3) Otherwise only update if there's a period of downtime.
             # This prevents servers from constantly changing IPs.
             cond_one = cond_two = False
-            if not status["last_success"] and not status["last_uptime"]:
-                if status["test_no"] >= 2:
+            if not status.last_success and not status.last_uptime:
+                if status.test_no >= 2:
                     cond_one = True
-            if status["last_success"]:
-                elapsed = current_time - status["last_uptime"]
+            if status.last_success:
+                elapsed = current_time - status.last_uptime
                 if elapsed > (MAX_SERVER_DOWNTIME * 2):
                     cond_two = True
 
             # Only set ip if there's a period of downtime.
             if cond_one or cond_two:
-                record["ip"] = ip
+                record.ip = ip
 
     def insert_imports_test_data(self, test_data=IMPORTS_TEST_DATA):
         for info in test_data:

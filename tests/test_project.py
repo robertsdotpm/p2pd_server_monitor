@@ -783,26 +783,35 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         """
         Is it possible I introduced an edge case with duplicate names.
         """
-        lines = file_content.splitlines()[:1]
+        lines = file_content.splitlines()
         import_list = insert_from_lines(IP4, STUN_MAP_TYPE, lines, db)
 
-        """
+        # Check pointers.
+        for entry in import_list:
+            found = False
+            for group_id in db.groups:
+                meta_group = db.groups[group_id]
+                if id(meta_group.group[0]) == id(entry):
+                    found = True
+
+            assert(found)
+
+        
         for fqn in fqn_map:
             alias = find_alias_by_fqn(db, fqn)
             assert(alias)
             msg = AliasUpdate(**{
                 "t": int(time.time()),
-                "alias_id": alias["id"],
+                "alias_id": alias.id,
                 "ip": fqn_map[fqn],
             })
 
             update_alias(msg)
             #print(alias)
-        """
+        
 
         for record_id in db.records[IMPORTS_TABLE_TYPE]:
             record = db.records[IMPORTS_TABLE_TYPE][record_id]
-            print(record)
             assert(record.ip not in ("", "0", None))
 
 
@@ -820,7 +829,6 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
             "monitor_frequency": None
         })
 
-        print(db.groups)
 
         return
         while work := get_work(work_req):
@@ -837,7 +845,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 def find_alias_by_fqn(db, fqn):
     for record_id in db.records[ALIASES_TABLE_TYPE]:
         record = db.records[ALIASES_TABLE_TYPE][record_id]
-        if record["fqn"] == fqn:
+        if record.fqn == fqn:
             return record
 
 def find_record(db, ip, port, fqn, import_type=STUN_MAP_TYPE, table_type=IMPORTS_TABLE_TYPE):

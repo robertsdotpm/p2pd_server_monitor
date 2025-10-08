@@ -33,7 +33,7 @@ def insert_from_lines(af, import_type, lines, db):
             }
 
             record = db.insert_import(**import_record)
-            import_list.append(import_record)
+            import_list.append(record)
             db.add_work(af, IMPORTS_TABLE_TYPE, [record])
         except DuplicateRecordError: # ignore really.
             log_exception()

@@ -320,7 +320,7 @@ def update_alias(data: AliasUpdate):
         raise Exception("Alias id not found.")
     
     alias = db.records[ALIASES_TABLE_TYPE][alias_id]
-    alias["ip"] = ip
+    alias.ip = ip
 
     for table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE):
         db.update_table_ip(table_type, ip, alias_id, current_time)
