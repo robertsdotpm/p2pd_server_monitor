@@ -735,7 +735,110 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
 
             assert(out)
 
-        
+    async def some_test(self):
+        file_content = """212.227.67.34,3478,stun.gmx.de
+0,3478,stun.1cbit.ru
+0,3478,stun.zepter.ru
+0,3478,stun.voipgate.com
+0,3478,stun.mixvoip.com
+81.82.206.117,3478
+80.156.214.187,3478
+172.233.245.118,3478
+193.22.17.97,3478
+81.83.12.46,3478
+90.145.158.66,3478
+212.53.40.40,3478
+81.3.27.44,3478
+217.91.243.229,3478
+212.144.246.197,3478
+87.129.12.229,3478
+69.20.59.115,3478
+34.74.124.204,3478
+91.212.41.85,3478
+195.145.93.141,3478
+95.216.145.84,3478
+91.213.98.54,3478
+212.53.40.43,3478
+62.72.83.10,3478
+80.155.54.123,3478
+188.40.203.74,3478
+129.153.212.128,3478
+92.205.106.161,3478
+0,3478,stun.peethultra.be
+0,3478,stun.3deluxe.de
+        """
+
+        fqn_map = {
+            "stun.1cbit.ru": "212.53.40.43",
+            "stun.voipgate.com": "185.125.180.70",
+            "stun.zepter.ru": "12.53.40.43",
+            "stun.mixvoip.com": "185.125.180.70",
+            "stun.gmx.de": "212.227.67.34",
+
+            # These two records conflict with existing import IPs.
+            "stun.peethultra.be": "81.82.206.117",
+            "stun.3deluxe.de": "217.91.243.229",
+        }
+
+        """
+        Is it possible I introduced an edge case with duplicate names.
+        """
+        lines = file_content.splitlines()[:1]
+        import_list = insert_from_lines(IP4, STUN_MAP_TYPE, lines, db)
+
+        """
+        for fqn in fqn_map:
+            alias = find_alias_by_fqn(db, fqn)
+            assert(alias)
+            msg = AliasUpdate(**{
+                "t": int(time.time()),
+                "alias_id": alias["id"],
+                "ip": fqn_map[fqn],
+            })
+
+            update_alias(msg)
+            #print(alias)
+        """
+
+        for record_id in db.records[IMPORTS_TABLE_TYPE]:
+            record = db.records[IMPORTS_TABLE_TYPE][record_id]
+            print(record)
+            assert(record.ip not in ("", "0", None))
+
+
+
+        """
+        In previous releases these all worked so see if anything is missing
+        as a warning -- it might be a sign that something broke.
+        These IPs apparently cant be imported?
+        """
+        broken_stun = {'87.129.12.229', '92.205.106.161', '188.40.203.74', '81.83.12.46', '195.145.93.141', '212.53.40.43', '34.74.124.204', '95.216.145.84', '80.156.214.187', '81.3.27.44', '62.72.83.10', '217.91.243.229', '172.233.245.118', '69.20.59.115', '91.212.41.85', '80.155.54.123', '90.145.158.66', '212.53.40.40', '129.153.212.128', '91.213.98.54', '212.144.246.197', '193.22.17.97', '81.82.206.117'}
+        work_req = WorkRequest(**{
+            "stack_type": None,
+            "table_type": None,
+            "current_time": None,
+            "monitor_frequency": None
+        })
+
+        print(db.groups)
+
+        return
+        while work := get_work(work_req):
+            print(work)
+
+
+        """
+        If you have an IP entry imported and then have an entry with no IP
+        but an FQN that points to has the same IP -- what happens?
+        """
+
+
+
+def find_alias_by_fqn(db, fqn):
+    for record_id in db.records[ALIASES_TABLE_TYPE]:
+        record = db.records[ALIASES_TABLE_TYPE][record_id]
+        if record["fqn"] == fqn:
+            return record
 
 def find_record(db, ip, port, fqn, import_type=STUN_MAP_TYPE, table_type=IMPORTS_TABLE_TYPE):
     for record_id in db.records[table_type]:

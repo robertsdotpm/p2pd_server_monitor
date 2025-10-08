@@ -37,7 +37,7 @@ class MemSchema():
             "group": group,
             "table_type": table_type,
             "af": af
-        }).dict()
+        })
         self.groups[group_id] = meta_group
 
         # Add group to work queue LOG(1).
@@ -45,7 +45,7 @@ class MemSchema():
 
         # Add group id field.
         for member in group:
-            member["group_id"] = group_id
+            member.group_id = group_id
 
         return meta_group
 
@@ -67,7 +67,7 @@ class MemSchema():
             "last_uptime": 0,
             "uptime": 0,
             "max_uptime": 0
-        }).dict()
+        })
 
         self.statuses[status_id] = status
         return status
@@ -82,7 +82,7 @@ class MemSchema():
             "group_id": None,
             "status_id": None,
             "table_type": ALIASES_TABLE_TYPE
-        }).dict()
+        })
 
         # Check unique constraint.
         unique_tup = frozenset([af, fqn])
@@ -97,7 +97,7 @@ class MemSchema():
 
         # Create a new status entry for this.
         status = self.init_status_row(alias_id, ALIASES_TABLE_TYPE)
-        alias["status_id"] = status["id"]
+        alias.status_id = status.id
 
         # Set it up as work.
         self.add_work(af, ALIASES_TABLE_TYPE, [alias])
@@ -146,7 +146,7 @@ class MemSchema():
             "status_id": None,
             "group_id": None,
             "score": score
-        }).dict()
+        })
 
         # Check unique constraint.
         unique_tup = frozenset([record_type, af, proto, fqn or ip, port])
@@ -165,7 +165,7 @@ class MemSchema():
 
         # Init status row.
         status = self.init_status_row(row_id, table_type)
-        record["status_id"] = status["id"]
+        record.status_id = status.id
 
         # Look this up by alias_id.
         if alias_id is not None:
@@ -177,7 +177,7 @@ class MemSchema():
         # Create alias record.
         if fqn:
             alias = self.fetch_or_insert_alias(af, fqn)
-            alias_id = alias["id"]
+            alias_id = alias.id
         else:
             alias_id = None
 

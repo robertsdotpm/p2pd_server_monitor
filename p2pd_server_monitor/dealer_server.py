@@ -51,6 +51,26 @@ edge case:
     -- inital /server results some have quality score set to 0
 
     I think I could refactor this whole thing to use in-memory databases
+
+
+    overview:
+    - I insert a bunch of STUN map servers
+        - any record that is associated with a FQN gets an alias
+    - Aliases are input as records
+    - All records have a status
+        - Aliases, imports, and services
+    - When aliases are updated the update should
+        - update the alias record
+        - update the IP for the import and services record.
+    - dont write tests that depend on other processes to run because they're
+    not deterministic and too hard to verify -- do it all with data structs
+
+    Ideas for new tests to write:
+    - store a list of fqn: ip mappings and update them.
+        - then check associated records have aliases set
+        - do this using the alias_update api
+    
+    
     
 """
 

@@ -10,6 +10,37 @@ service_lookup = {
 
 file_names = ("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v4.csv",)
 
+def insert_from_lines(af, import_type, lines, db):
+    import_list = []
+    for line in lines:
+        try:
+            line = line.strip()
+            parts = line.split(",")
+            ip = None if parts[0] in ("0", "") else parts[0]
+            port = parts[1]
+            fqn = None
+            if len(parts) > 2:
+                fqn = parts[2]
+
+            import_record = {
+                "import_type": import_type,
+                "af": int(af),
+                "ip": ip,
+                "port": int(port),
+                "user": None,
+                "password": None,
+                "fqn": fqn
+            }
+
+            record = db.insert_import(**import_record)
+            import_list.append(import_record)
+            db.add_work(af, IMPORTS_TABLE_TYPE, [record])
+        except DuplicateRecordError: # ignore really.
+            log_exception()
+        except:
+            what_exception()
+
+    return import_list
 
 def insert_main(db):
     import_list = []
@@ -34,32 +65,6 @@ def insert_main(db):
 
         with open(file_path, "r") as f:
             lines = f.readlines()
-            for line in lines:
-                try:
-                    line = line.strip()
-                    parts = line.split(",")
-                    ip = None if parts[0] in ("0", "") else parts[0]
-                    port = parts[1]
-                    fqn = None
-                    if len(parts) > 2:
-                        fqn = parts[2]
-
-                    import_record = {
-                        "import_type": import_type,
-                        "af": int(af),
-                        "ip": ip,
-                        "port": int(port),
-                        "user": None,
-                        "password": None,
-                        "fqn": fqn
-                    }
-
-                    record = db.insert_import(**import_record)
-                    import_list.append(import_record)
-                    db.add_work(af, IMPORTS_TABLE_TYPE, [record])
-                except DuplicateRecordError: # ignore really.
-                    log_exception()
-                except:
-                    what_exception()
+            import_list += insert_from_lines(af, import_type, lines, db)
 
     return import_list
