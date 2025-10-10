@@ -1,14 +1,57 @@
 import math
 import time
 from typing import Any
+from dataclasses import asdict
+import aiosqlite
 from .dealer_defs import *
 from .work_queue import *
 from .schema_defs import *
 from p2pd import *
 
-class MemSchema():
+async def insert_object(db, table, obj):
+    # get existing columns
+    async with db.execute(f"PRAGMA table_info({table})") as cursor:
+        columns = {row[1] async for row in cursor}  # row[1] is column name
+
+    data = asdict(obj) if hasattr(obj, "__dataclass_fields__") else vars(obj)
+    valid = {k: v for k, v in data.items() if k in columns}
+
+    if not valid:
+        return
+
+    cols = ", ".join(valid.keys())
+    placeholders = ", ".join("?" for _ in valid)
+    sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
+    await db.execute(sql, tuple(valid.values()))
+
+async def load_objects(db, table, cls, where_clause: str = None, where_args: tuple = ()):
+    async with db.execute(f"PRAGMA table_info({table})") as cursor:
+        db_cols = {row[1] async for row in cursor}
+
+    class_fields = [f.name for f in fields(cls)]
+    select_cols = [c for c in class_fields if c in db_cols]
+    if not select_cols:
+        return []
+
+    sql = f"SELECT {', '.join(select_cols)} FROM {table}"
+    if where_clause:
+        sql += f" WHERE {where_clause}"
+    sql += " ORDER BY id ASC"
+
+    async with db.execute(sql, where_args) as cursor:
+        rows = await cursor.fetchall()
+        col_index = {desc[0]: i for i, desc in enumerate(cursor.description)}
+
+    objs = []
+    for row in rows:
+        kwargs = {col: row[col_index[col]] for col in select_cols}
+        objs.append(cls(**kwargs))
+    return objs
+
+
+class MemDB():
     def __init__(self):
-        self.setup_db()
+        self.setup_db() 
 
     def setup_db(self):
         self.statuses = {} # id: status
@@ -25,13 +68,33 @@ class MemSchema():
             
         self.records_by_aliases = {}
         self.records_by_ip = {}
-        self.unique_imports = {}
-        self.unique_services = {}
-        self.unique_alias = {}
 
-    def add_work(self, af: int, table_type: int, group: Any):
+        # Unique indexes.
+        self.uniques = {
+            "aliases": UniqueIndex(["af", "fqn"]),
+            "services": UniqueIndex(["type", "af", "proto", "fqn_or_ip", "port"]),
+            "imports": UniqueIndex(["type", "af", "proto", "fqn_or_ip", "port"])
+        }
+
+        # Table name mappings.
+        self.tables = {
+            "services": self.records[SERVICES_TABLE_TYPE],
+            "aliases": self.records[ALIASES_TABLE_TYPE],
+            "imports": self.records[IMPORTS_TABLE_TYPE],
+            "status": self.statuses
+        }
+
+        # Field types.
+        self.types = {
+            "services": RecordType,
+            "al1ases": AliasType,
+            "imports": RecordType,
+            "status": StatusType
+        }
+
+    def add_work(self, af: int, table_type: int, group: Any, group_id=None):
         # Save this as a new "group".
-        group_id = len(self.groups)
+        group_id = group_id or len(self.groups)
         meta_group = MetaGroup(**{
             "id": group_id,
             "group": group,
@@ -85,11 +148,7 @@ class MemSchema():
         })
 
         # Check unique constraint.
-        unique_tup = (af, fqn,)
-        if unique_tup in self.unique_alias:
-            raise KeyError("Alias already exists" + str(unique_tup))
-        else:
-            self.unique_alias[unique_tup] = alias
+        self.uniques["aliases"].add(alias)
 
         # Record the new alias.
         self.records[ALIASES_TABLE_TYPE][alias_id] = alias
@@ -104,11 +163,11 @@ class MemSchema():
         return alias
 
     def fetch_or_insert_alias(self, af: int, fqn: str, ip=None):
-        unique_tup = (af, fqn,)
-        if unique_tup in self.unique_alias:
-            return self.unique_alias[unique_tup]
-        else:
-            return self.record_alias(af, fqn, ip=ip)
+        alias = self.uniques["aliases"].get_key((af, fqn))
+        if alias:
+            return alias
+        
+        return self.record_alias(af, fqn, ip=ip)
 
     def insert_record(self, table_type: int, record_type: int, af: int, ip: Any, port: int, user: Any, password: Any, proto=None, fqn=None, alias_id=None, score=0):
         # Some servers like to point to local resources for trickery.
@@ -141,24 +200,26 @@ class MemSchema():
             "ip": ip,
             "port": port,
             "user": user,
-            "password": password,
+            "password": password, # pass
             "alias_id": alias_id,
             "status_id": None,
             "group_id": None,
             "score": score
         })
 
-        # Check unique constraint.
-        unique_tup = (record_type, af, proto, fqn or ip, port,)
+        # Select the correct UniqueIndex
         if table_type == SERVICES_TABLE_TYPE:
-            unique_dest = self.unique_services
+            unique_index = self.uniques["services"]
         else:
-            unique_dest = self.unique_imports
+            unique_index = self.uniques["imports"]
 
-        if unique_tup in unique_dest:
-            raise DuplicateRecordError("Row already exists " + str(unique_tup))
-        else:
-            unique_dest[unique_tup] = record
+        # Add record to the index (raises KeyError on duplicate)
+        try:
+            unique_index.add(record)
+        except KeyError:
+            raise DuplicateRecordError(
+                f"Row already exists: type={record.type}, af={record.af}"
+            )
 
         # Save in services table.
         self.records[table_type][row_id] = record
@@ -333,6 +394,75 @@ class MemSchema():
 
             self.add_work(records[0]["af"], SERVICES_TABLE_TYPE, records)
 
+    async def sqlite_export(self):
+        async with aiosqlite.connect(DB_NAME) as db:
+            for table in self.tables:
+                for record_id in self.tables[table]:
+                    entry = self.tables[table][record_id]
+                    try:
+                        await insert_object(db, table, entry)
+                    except:
+                        what_exception()
+
+            await db.commit()
+
+    async def sqlite_import(self):
+        self.setup_db() 
+
+        async with aiosqlite.connect(DB_NAME) as db:
+            # 1. Load all StatusType rows in batch
+            all_statuses = await load_objects(db, "status", StatusType)
+            for status in all_statuses:
+                self.statuses[status.id] = status
+
+            # 2. Load main tables.
+            tables = ("aliases", "imports", "services",)
+            group_maps = {}
+            for table_name in tables:
+                cls = self.types[table_name]
+                objs = await load_objects(db, table_name, cls)
+                for obj in objs:
+                    # Insert into main table dict
+                    self.tables[table_name][obj.id] = obj
+
+                    # Rebuild unique indexes
+                    self.uniques[table_name].add(obj)
+                    if table_name == "aliases":
+                        self.records_by_aliases[obj.id] = []
+                    else:
+                        if obj.alias_id is not None:
+                            self.records_by_aliases[obj.alias_id].append(obj)
+
+                    # Rebuild records_by_ip mapping
+                    if getattr(obj, "ip", None):
+                        self.records_by_ip.setdefault(obj.ip, []).append(obj)
+
+                    # Add it as work.
+                    # Works for alias and import.
+                    # services is same but [... records with same group _id]
+                    if table_name == "services":
+                        if obj.group_id is not None:
+                            if obj.group_id not in group_maps:
+                                group_maps[obj.group_id] = []
+                            group_maps[obj.group_id].append(obj)
+                    else:
+                        self.add_work(obj.af, obj.table_type, [obj])
+
+            # Rebuild meta_group structure for services.
+            for group_id in group_maps:
+                group = group_maps[group_id]
+                self.add_work(group[0].af, SERVICES_TABLE_TYPE, group, group_id)
+
+        # After loading all tables
+        for status in self.statuses.values():
+            table_type = status.table_type
+            row_id = status.row_id
+
+            # Fetch the corresponding record
+            record = self.records[table_type].get(row_id)
+            if record:
+                record.status_id = status.id
+
 def compute_service_score(status, max_uptime_override=None):
     failed_tests = float(status.get("failed_tests", 0))
     test_no = float(status.get("test_no", 0))
@@ -353,3 +483,5 @@ def compute_service_score(status, max_uptime_override=None):
     )
     
     return quality_score
+
+

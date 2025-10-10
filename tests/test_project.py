@@ -906,10 +906,15 @@ imports_list=[[Service(service_type=3, af=2, proto=1, ip='217.91.243.229', port=
             if not found:
                 print(record)
 
-
         """
         If you have an IP entry imported and then have an entry with no IP
         but an FQN that points to has the same IP -- what happens?
+        """
+
+        """
+        Are you having FQNs active for existing services? Test that
+        And obviously since change has FQNs disabled the only way for that to
+        happen is to re-run imports but restarting the server might be easier.
         """
 
 

@@ -5,6 +5,56 @@ from p2pd import *
 from fqdn import FQDN
 from .dealer_defs import *
 
+class UniqueIndex:
+    def __init__(self, key_fields):
+        """
+        key_fields: list of field names, can include 'fqn_or_ip' for special logic
+        """
+        self.key_fields = key_fields
+        self._index = {}
+
+    def _make_key(self, obj):
+        """
+        Generate a tuple key from an object.
+        Supports special field 'fqn_or_ip' to use obj.fqn if truthy, else obj.ip
+        """
+        key = []
+        for f in self.key_fields:
+            if f == "fqn_or_ip":
+                key.append(getattr(obj, "fqn", None) or getattr(obj, "ip", None))
+            else:
+                key.append(getattr(obj, f, None))
+        return tuple(key)
+
+    def add(self, obj):
+        """
+        Add object to index, enforcing uniqueness.
+        Raises KeyError if duplicate exists.
+        """
+        key = self._make_key(obj)
+        if key in self._index:
+            raise KeyError(f"Duplicate entry {key}")
+        self._index[key] = obj
+
+    def get(self, obj):
+        """
+        Retrieve object by actual object.
+        """
+        return self._index.get(self._make_key(obj))
+
+    def get_key(self, key_tuple):
+        """
+        Retrieve object by raw key tuple.
+        """
+        return self._index.get(key_tuple)
+
+    def all(self):
+        """
+        Return all objects in the index.
+        """
+        return list(self._index.values())
+
+
 def add_validator(field_name: str, cls: type, func):
     setattr(
         cls, 

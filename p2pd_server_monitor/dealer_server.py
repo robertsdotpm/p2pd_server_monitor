@@ -70,6 +70,10 @@ edge case:
         - then check associated records have aliases set
         - do this using the alias_update api
     
+    dont worry about saving state yet for first version. if clients see an empty
+    server list they can avoid update. otherwise a fresh reload is equivalent to
+    having a success list for all servers tho you lose the uptime and scoring info
+    
     
     
 """
@@ -85,12 +89,12 @@ from .dealer_utils import *
 from .db_init import *
 from .dealer_work import *
 from .txt_strs import *
-from .mem_schema import *
+from .mem_db import *
 from .do_imports import *
 
 app = FastAPI(default_response_class=PrettyJSONResponse)
 
-db = MemSchema()
+db = MemDB()
 server_cache = []
 refresh_task = None
 
@@ -338,6 +342,12 @@ async def list_aliases_len():
 @app.get("/list_aliases")
 async def list_aliases_len():
     return db.records[ALIASES_TABLE_TYPE]
+
+
+@app.get("/sql_export", dependencies=[Depends(localhost_only)])
+async def sql_export():
+    await db.sqlite_export()
+    return "done"
 
 # Show a listing of servers based on quality
 # Only public API is this one.
