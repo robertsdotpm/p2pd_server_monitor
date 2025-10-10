@@ -1,5 +1,5 @@
 from typing_extensions import TypedDict
-from typing import Any, List, Union
+from typing import Any, List, Union, Optional
 from pydantic import BaseModel, field_validator, model_validator
 from p2pd import *
 from fqdn import FQDN
@@ -89,9 +89,15 @@ class AliasType(BaseModel):
     af: int
     fqn: str
     ip: str | None
+    """
     group_id: int | None
     status_id: int | None
     table_type: int
+    """
+
+    group_id: Optional[int] = None
+    status_id: Optional[int] = None
+    table_type: int = ALIASES_TABLE_TYPE
 
     @field_validator("fqn")
     @classmethod
@@ -105,15 +111,15 @@ class RecordType(BaseModel):
     table_type: int
     type: int
     af: int
-    proto: int | None
+    proto: Optional[int] = None
     ip: str | None
     port: int
-    user: str | None
-    password: str | None
-    alias_id: int | None
-    status_id: int | None
-    group_id: int | None
-    score: int
+    user: Optional[str] = None
+    password: Optional[str] = None
+    alias_id: Optional[int] = None
+    status_id: Optional[int] = None
+    group_id: Optional[int] = None
+    score: int = 0
 
     @field_validator("type")
     @classmethod
@@ -184,3 +190,19 @@ add_validator("table_type", StatusType, validate_table_type)
 add_validator("table_type", MetaGroup, validate_table_type)
 add_validator("ip", AliasType, validate_ip)
 add_validator("ip", RecordType, validate_ip)
+
+# Field types.
+MEM_DB_TYPES = {
+    SERVICES_TABLE_TYPE: RecordType,
+    ALIASES_TABLE_TYPE: AliasType,
+    IMPORTS_TABLE_TYPE: RecordType,
+    STATUS_TABLE_TYPE: StatusType
+}
+
+MEM_DB_ENUMS = {
+    SERVICES_TABLE_TYPE: "services",
+    ALIASES_TABLE_TYPE: "aliases",
+    IMPORTS_TABLE_TYPE: "imports",
+    STATUS_TABLE_TYPE: "status",
+    GROUPS_TABLE_TYPE: "groups",
+}

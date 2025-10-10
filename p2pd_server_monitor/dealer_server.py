@@ -187,7 +187,9 @@ async def refresh_server_cache():
 @app.on_event("startup")
 async def main():
     global refresh_task
-    insert_main(db)
+    #insert_main(db)
+    #return
+    await db.sqlite_import()
     refresh_task = asyncio.create_task(refresh_server_cache())
 
 def localhost_only(request: Request):
@@ -348,6 +350,20 @@ async def list_aliases_len():
 async def sql_export():
     await db.sqlite_export()
     return "done"
+
+@app.get("/sql_import", dependencies=[Depends(localhost_only)])
+async def sql_import():
+    global server_cache
+    await db.sqlite_import()
+    server_cache = build_server_list()
+    return "done"
+
+@app.get("/delete_all", dependencies=[Depends(localhost_only)])
+async def delete_all():
+    async with aiosqlite.connect(DB_NAME) as db:
+        await delete_all_data(db)
+        await db.commit()
+
 
 # Show a listing of servers based on quality
 # Only public API is this one.
