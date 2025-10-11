@@ -2,7 +2,7 @@
 
 #export P2PD_DEBUG=1
 
-n="${MONITOR_WORKER_NO:-20}"
+n="${MONITOR_WORKER_NO:-100}"
 
 echo "Starting dealer server"
 python3 -m p2pd_server_monitor.dealer_server --log_path="/opt/p2pd_monitor/dealer.log" --py_p2pd_monitor &

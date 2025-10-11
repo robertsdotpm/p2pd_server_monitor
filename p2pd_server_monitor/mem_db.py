@@ -1,63 +1,9 @@
-import math
 import time
 from typing import Any
-from dataclasses import asdict, fields, is_dataclass
-import aiosqlite
 from .dealer_defs import *
 from .work_queue import *
-from .schema_defs import *
+from .mem_db_defs import *
 from p2pd import *
-
-async def insert_object(db, table, obj):
-    # get existing columns
-    async with db.execute(f"PRAGMA table_info({table})") as cursor:
-        columns = {row[1] async for row in cursor}  # row[1] is column name
-
-    data = asdict(obj) if hasattr(obj, "__dataclass_fields__") else vars(obj)
-    valid = {k: v for k, v in data.items() if k in columns}
-
-    if not valid:
-        return
-
-    cols = ", ".join(valid.keys())
-    placeholders = ", ".join("?" for _ in valid)
-    sql = f"INSERT INTO {table} ({cols}) VALUES ({placeholders})"
-    await db.execute(sql, tuple(valid.values()))
-
-async def load_objects(db, table, cls, where_clause: str = None, where_args: tuple = ()):
-    async with db.execute(f"PRAGMA table_info({table})") as cursor:
-        db_cols = {row[1] async for row in cursor}
-
-    # Get class fields dynamically
-    if is_dataclass(cls):
-        class_fields = [f.name for f in fields(cls)]
-    elif hasattr(cls, "model_fields"):  # Pydantic v2
-        class_fields = list(cls.model_fields.keys())
-    elif hasattr(cls, "__fields__"):  # Pydantic v1
-        class_fields = list(cls.__fields__.keys())
-    else:
-        raise TypeError(f"Cannot introspect fields of {cls}")
-
-    print(class_fields)
-    select_cols = [c for c in class_fields if c in db_cols]
-    if not select_cols:
-        return []
-
-    sql = f"SELECT {', '.join(select_cols)} FROM {table}"
-    if where_clause:
-        sql += f" WHERE {where_clause}"
-    sql += " ORDER BY id ASC"
-
-    async with db.execute(sql, where_args) as cursor:
-        rows = await cursor.fetchall()
-        col_index = {desc[0]: i for i, desc in enumerate(cursor.description)}
-
-    objs = []
-    for row in rows:
-        kwargs = {col: row[col_index[col]] for col in select_cols}
-        objs.append(cls(**kwargs))
-    return objs
-
 
 class MemDB():
     def __init__(self):
@@ -86,8 +32,20 @@ class MemDB():
         # Unique indexes.
         self.uniques = {
             ALIASES_TABLE_TYPE: UniqueIndex(["af", "fqn"]),
-            SERVICES_TABLE_TYPE: UniqueIndex(["type", "af", "proto", "fqn_or_ip", "port"]),
-            IMPORTS_TABLE_TYPE: UniqueIndex(["type", "af", "proto", "fqn_or_ip", "port"])
+            SERVICES_TABLE_TYPE: UniqueIndex([
+                "type",
+                "af",
+                "proto",
+                "fqn_or_ip",
+                "port"
+            ]),
+            IMPORTS_TABLE_TYPE: UniqueIndex([
+                "type",
+                "af",
+                "proto",
+                "fqn_or_ip",
+                "port"
+            ])
         }
 
         # Table name mappings.
@@ -367,138 +325,41 @@ class MemDB():
             if cond_one or cond_two:
                 record.ip = ip
 
-    def insert_imports_test_data(self, test_data=IMPORTS_TEST_DATA):
-        for info in test_data:
-            fqn = info[0]
-            info = info[1:]
-            record = self.insert_import(*info, fqn=fqn)
+    def allocate_work(self, need_afs, table_types, cur_time, mon_freq):
+        # Get oldest work by table type and client AF preference.
+        for table_choice in table_types:
+            for need_af in need_afs:
+                """
+                The most recent items are always added at the end. Items at the start
+                are oldest. If the oldest items are still too recent to pass time
+                checks then we know that later items in the queue are also too recent.
+                """
+                wq = self.work[table_choice][need_af]
+                for status_type in (STATUS_INIT, STATUS_AVAILABLE, STATUS_DEALT,):
+                    for group_id, meta_group in wq.queues[status_type]:
+                        assert(meta_group)
+                        group = meta_group.group
 
-            # Set it up as work.
-            self.add_work(record["af"], IMPORTS_TABLE_TYPE, [record])
+                        # Never been allocated so safe to hand out.
+                        if status_type == STATUS_INIT:
+                            wq.move_work(group_id, STATUS_DEALT)
+                            return list_x_to_dict(group)
 
-    def insert_services_test_data(self, test_data=SERVICES_TEST_DATA):
-        for groups in test_data:
-            records = []
+                        # Work is moved back to available but don't do it too soon.
+                        # Statuses are bulk updated for entries in a group.
+                        status = self.statuses[group[0].status_id]
+                        elapsed = cur_time - status.last_status
+                        if status_type != STATUS_DEALT:
+                            if elapsed < mon_freq:
+                                break
 
-            # All items in a group share the same group ID.
-            for group in groups:
+                        # Check for worker timeout.
+                        if status_type == STATUS_DEALT:
+                            if elapsed < WORKER_TIMEOUT:
+                                break
 
-                # Store alias(es)
-                alias = None
-                try:
-                    for fqn in group[0]:
-                        alias = self.fetch_or_insert_alias(group[2], fqn)
-                        break
-                except:
-                    log_exception()
-
-                alias_id = alias["id"] if alias else None
-                record = self.insert_service(
-                    service_type=group[1],
-                    af=group[2],
-                    proto=group[3],
-                    ip=ip_norm(group[4]),
-                    port=group[5],
-                    user=None,
-                    password=None,
-                    alias_id=alias_id
-                )
-
-                records.append(record)
-
-            self.add_work(records[0]["af"], SERVICES_TABLE_TYPE, records)
-
-    async def sqlite_export(self):
-        async with aiosqlite.connect(DB_NAME) as db:
-            for table_type in self.tables:
-                for record_id in self.tables[table_type]:
-                    entry = self.tables[table_type][record_id]
-                    table_name = MEM_DB_ENUMS[table_type]
-                    try:
-                        await insert_object(db, table_name, entry)
-                    except:
-                        what_exception()
-
-            await db.commit()
-
-    async def sqlite_import(self):
-        async with aiosqlite.connect(DB_NAME) as db:
-            # 1. Load all StatusType rows in batch
-            all_statuses = await load_objects(db, "status", StatusType)
-            for status in all_statuses:
-                self.add_id(STATUS_TABLE_TYPE, status.id + 1)
-                self.statuses[status.id] = status
-
-            # Used to rebuild groups table.
-            group_maps = {
-                ALIASES_TABLE_TYPE: {},
-                IMPORTS_TABLE_TYPE: {},
-                SERVICES_TABLE_TYPE: {}
-            }
-
-            # 2. Load main tables.
-            for table_type in group_maps:
-                cls = MEM_DB_TYPES[table_type]
-                table_name = MEM_DB_ENUMS[table_type]
-                objs = await load_objects(db, table_name, cls)
-                for obj in objs:
-                    # Insert into main table dict
-                    self.add_id(table_type, obj.id + 1)
-                    self.tables[table_type][obj.id] = obj
-
-                    # Try increase max group_id.
-                    self.add_id(GROUPS_TABLE_TYPE, obj.group_id + 1)
-                    if obj.group_id not in group_maps[table_type]:
-                        group_maps[table_type][obj.group_id] = []
-                    group_maps[table_type][obj.group_id].append(obj)
-
-                    # Rebuild unique indexes
-                    self.uniques[table_type].add(obj)
-                    if table_name == "aliases":
-                        self.records_by_aliases[obj.id] = []
-                    else:
-                        if obj.alias_id is not None:
-                            self.records_by_aliases[obj.alias_id].append(obj)
-
-                    # Rebuild records_by_ip mapping
-                    if getattr(obj, "ip", None):
-                        self.records_by_ip.setdefault(obj.ip, []).append(obj)
-
-            # Rebuild meta_group structure for services.
-            for table_type in group_maps:
-                for group_id in group_maps[table_type]:
-                    group = group_maps[table_type][group_id]
-                    self.add_work(group[0].af, table_type, group, group_id)
-
-        # After loading all tables
-        for status in self.statuses.values():
-            table_type = status.table_type
-            row_id = status.row_id
-
-            # Fetch the corresponding record
-            record = self.records[table_type].get(row_id)
-            if record:
-                record.status_id = status.id
-
-def compute_service_score(status, max_uptime_override=None):
-    failed_tests = float(status.get("failed_tests", 0))
-    test_no = float(status.get("test_no", 0))
-    uptime = float(status.get("uptime", 0))
-
-    if max_uptime_override is None:
-        max_uptime = float(status.get("max_uptime", 0))
-    else: 
-        max_uptime = float(max_uptime_override)
-    
-    # Avoid division by zero
-    uptime_ratio = (uptime / max_uptime) if max_uptime > 0 else 1.0
-    
-    quality_score = (
-        (1.0 - failed_tests / (test_no + 1e-9)) * 
-        (0.5 * uptime_ratio + 0.5) *
-        (1.0 - math.exp(-test_no / 50.0))
-    )
-    
-    return quality_score
-
-
+                        # Otherwise: allocate it as work.
+                        wq.move_work(group_id, STATUS_DEALT)
+                        return list_x_to_dict(group)
+                    
+        return []

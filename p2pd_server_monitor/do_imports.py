@@ -2,7 +2,6 @@ import os
 from p2pd import *
 from .dealer_utils import *
 from .db_init import *
-from .dealer_work import *
 
 service_lookup = {
     "stun": STUN_MAP_TYPE,

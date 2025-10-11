@@ -1,6 +1,4 @@
-import asyncio
 import httpx
-import aiosqlite
 from p2pd import *
 from .dealer_defs import *
 

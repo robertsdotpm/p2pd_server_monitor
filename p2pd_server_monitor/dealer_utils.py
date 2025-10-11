@@ -1,11 +1,15 @@
-import asyncio
-import aiosqlite
+import math
 from fastapi.responses import JSONResponse
-from typing import Union, Any
+from fastapi import Request, HTTPException
 from p2pd import *
+from .db_init import *
 from .dealer_defs import *
+from .txt_strs import *
 
-group_to_dict = lambda x: [v.dict() for v in x]
+def localhost_only(request: Request):
+    client_host = request.client.host
+    if client_host not in ("127.0.0.1", "::1"):
+        raise HTTPException(status_code=403, detail="Access forbidden")
 
 class PrettyJSONResponse(JSONResponse):
     def render(self, content: any) -> bytes:
@@ -16,160 +20,69 @@ class PrettyJSONResponse(JSONResponse):
             indent=2,        # pretty-print here
         ).encode("utf-8")
 
-async def init_status_row(db, row_id, table_type):
-    # Parameterized insert
-    sql  = "INSERT INTO status (%s) VALUES " % (", ".join(STATUS_SCHEMA)) 
-    sql += "(?, ?, ?, ?, ?, ?, ?, ?)"
-    t    = int(time.time())
+def compute_service_score(status, max_uptime_override=None):
+    failed_tests = float(status.get("failed_tests", 0))
+    test_no = float(status.get("test_no", 0))
+    uptime = float(status.get("uptime", 0))
 
-    async with await db.execute(
-        sql,
-        (row_id, table_type, STATUS_INIT, t, 0, 0, 0, 0,)
-    ) as cursor:
-        return cursor.lastrowid
+    if max_uptime_override is None:
+        max_uptime = float(status.get("max_uptime", 0))
+    else: 
+        max_uptime = float(max_uptime_override)
     
-async def load_status_row(db, status_id):
-    sql = "SELECT * FROM status WHERE id=?"
-    async with db.execute(sql, (status_id,)) as cursor:
-        row = await cursor.fetchone()
-        return dict(row) if row else None
-
-async def record_alias(db, af, fqn, ip=None):
-    sql = "INSERT into aliases (af, fqn, ip) VALUES (?, ?, ?)"
-    alias_id = None
-    async with await db.execute(sql, (af, fqn, ip,)) as cursor:
-        alias_id = cursor.lastrowid
-
-    await init_status_row(
-        db,
-        alias_id,
-        ALIASES_TABLE_TYPE
+    # Avoid division by zero
+    uptime_ratio = (uptime / max_uptime) if max_uptime > 0 else 1.0
+    
+    quality_score = (
+        (1.0 - failed_tests / (test_no + 1e-9)) * 
+        (0.5 * uptime_ratio + 0.5) *
+        (1.0 - math.exp(-test_no / 50.0))
     )
+    
+    return quality_score
 
-    return alias_id
-
-async def load_alias_row(db, alias_id):
-    sql = "SELECT * FROM aliases WHERE id=?"
-    async with db.execute(sql, (alias_id,)) as cursor:
-        rows = await cursor.fetchone()
-        if rows:
-            return rows
-
-    return None
-
-async def fetch_or_insert_alias(db, af, fqn, ip=None):
-    sql = "SELECT * FROM aliases WHERE af=? AND fqn=?"
-    async with db.execute(sql, (af, fqn,)) as cursor:
-        rows = await cursor.fetchone()
-        if rows:
-            return dict(rows)["id"]
-
-    return await record_alias(db, af, fqn, ip)
-
-async def get_new_group_id(db):
-    # Insert a dummy row and get its id atomically
-    async with db.execute("INSERT INTO groups DEFAULT VALUES") as cursor:
-        await db.commit()
-        return cursor.lastrowid
-
-async def insert_import(db, import_type, af, ip, port, user=None, password=None, fqn=None):
-    if ip not in ("", "0"):
-        ip = ensure_ip_is_public(ip)
-    sql  = "INSERT INTO imports (type, af, ip, port, user, pass, alias_id) "
-    sql += "VALUES (?, ?, ?, ?, ?, ?, ?)"
-    info = [import_type, af, ip, port, user, password, None]
-    import_id = None
-
-    # Associate alias record with this insert.
-    if fqn:
-        try:
-            alias_id = await fetch_or_insert_alias(db, af, fqn)
-            info[-1] = alias_id
-        except:
-            log("Fqn error for %s" % (fqn,))
-            log_exception()
-
-    async with db.execute(sql, info) as cursor:
-        import_id = cursor.lastrowid
-        await init_status_row(
-            db,
-            cursor.lastrowid,
-            IMPORTS_TABLE_TYPE
-        )
-
-        await db.commit()
-        return import_id
+def build_server_list(mem_db):
+    # Init server list.
+    s = {}
+    for service_type in SERVICE_TYPES:
+        by_service = s[TXTS[service_type]] = {}
+        for af in VALID_AFS:
+            by_af = by_service[TXTS["af"][af]] = {}
+            for proto in (UDP, TCP,):
+                by_proto = by_af[TXTS["proto"][proto]] = []
 
 
-async def insert_service(
-    db,
-    service_type,
-    af,
-    proto,
-    ip,
-    port,
-    user,
-    password,
-    group_id,
-    alias_id
-):
-    # Some servers like to point to local resources for trickery.
-    ip = ensure_ip_is_public(ip)
+    for group_id in mem_db.groups:
+        meta_group = mem_db.groups[group_id]
+        if meta_group.table_type != SERVICES_TABLE_TYPE:
+            continue
 
-    # Load alias row to ensure it exists.
-    if alias_id:
-        alias_row = await load_alias_row(db, alias_id)
-        if not alias_row:
-            raise Exception("Alias ID does not exist.")
+        scores = []
+        group = list_x_to_dict(meta_group.group)
+        for record in group:
+            status = mem_db.statuses[record["status_id"]].dict()
+            for k in ("uptime", "max_uptime", "last_success",):
+                record[k] = status[k]
 
-        # Disable aliases for STUN change servers.
-        if service_type == STUN_CHANGE_TYPE:
-            alias_id = None
+            record["score"] = compute_service_score(status)
+            scores.append(record["score"])
 
-    # SQL statement for insert into services.
-    sql  = """
-    INSERT INTO services 
-        (type, af, proto, ip, port, user, pass, group_id, alias_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """
+        score_avg = sum(scores) / len(scores)
+        for record in group:
+            record["score"] = score_avg
 
-    # Execute the query and make a status row for it.
-    params  = (service_type, af, proto, ip, port, user,)
-    params += (password, group_id, alias_id,)
-    insert_id = status_id = None
-    async with db.execute(sql, params) as cursor:
-        insert_id = cursor.lastrowid
-        status_id = await init_status_row(
-            db,
-            insert_id,
-            SERVICES_TABLE_TYPE
-        )
+        service_type = TXTS[group[0]["type"]]
+        af = TXTS["af"][group[0]["af"]]
+        proto = TXTS["proto"][group[0]["proto"]]
+        s[service_type][af][proto].append(group)
 
-    return [status_id, insert_id]
+    for service_type in SERVICE_TYPES:
+        for af in VALID_AFS:
+            for proto in (UDP, TCP,):
+                by_service = s[TXTS[service_type]]
+                by_af = by_service[TXTS["af"][af]]
+                by_proto = by_af[TXTS["proto"][proto]]
+                by_proto.sort(key=lambda x: x[0]["score"])
 
-async def update_table_ip(db, table_name, ip, alias_id, current_time):
-    sql = f"""
-    UPDATE {table_name}
-    SET ip = ?
-    WHERE alias_id = ?
-      AND EXISTS (
-          SELECT 1
-          FROM status
-          WHERE status.row_id = {table_name}.id
-            AND status.status != {STATUS_DISABLED}
-            AND (
-                (
-                    status.last_success = 0
-                    AND status.last_uptime = 0
-                    AND status.test_no >= 2
-                )
-                OR
-                (
-                    status.last_success != 0
-                    AND (? - status.last_uptime) > ?
-                )
-            )
-      );
-    """
-    params = (ip, alias_id, current_time, MAX_SERVER_DOWNTIME * 2,)
-    await db.execute(sql, params)
+    s["timestamp"] = int(time.time())
+    return s
