@@ -86,3 +86,125 @@ def build_server_list(mem_db):
 
     s["timestamp"] = int(time.time())
     return s
+
+def mark_complete(mem_db, is_success: int, status_id: int, t=None):
+    t = t or int(time.time())
+    status_type = STATUS_AVAILABLE
+    if status_id not in mem_db.statuses:
+        raise KeyError("could not load status row %s" % (status_id,))
+    
+    # Delete target row if status is for an imports.
+    # We only want imports work to be done once.
+    status = mem_db.statuses[status_id]
+    table_type = status.table_type
+    if table_type == IMPORTS_TABLE_TYPE:
+        status_type = STATUS_DISABLED
+
+    # Remove from dealt queue.
+    record = mem_db.records[table_type][status.row_id]
+    af = record.af
+    group_id = record.group_id
+
+    # Try to move work to available -- throw exception if not exist.
+    mem_db.work[table_type][af].move_work(group_id, status_type)
+
+    # Update stats for success.
+    if is_success:
+        if not status.last_uptime:
+            change = 0
+        else:
+            change = max(0, t - status.last_uptime)
+
+        status.uptime += change
+        if status.uptime > status.max_uptime:
+            status.max_uptime = status.uptime
+
+        status.last_uptime = t
+        status.last_success = t
+
+    # Update stats for failure.
+    if not is_success:
+        status.failed_tests += 1
+        status.uptime = 0
+    
+    status.status = status_type
+    status.test_no += 1
+    status.last_status = t
+
+def allocate_work(mem_db, need_afs, table_types, cur_time, mon_freq):
+    # Get oldest work by table type and client AF preference.
+    for table_choice in table_types:
+        for need_af in need_afs:
+            """
+            The most recent items are always added at the end. Items at the start
+            are oldest. If the oldest items are still too recent to pass time
+            checks then we know that later items in the queue are also too recent.
+            """
+            wq = mem_db.work[table_choice][need_af]
+            for status_type in (STATUS_INIT, STATUS_AVAILABLE, STATUS_DEALT,):
+                for group_id, meta_group in wq.queues[status_type]:
+                    assert(meta_group)
+                    group = meta_group.group
+
+                    # Never been allocated so safe to hand out.
+                    if status_type == STATUS_INIT:
+                        wq.move_work(group_id, STATUS_DEALT)
+                        return list_x_to_dict(group)
+
+                    # Work is moved back to available but don't do it too soon.
+                    # Statuses are bulk updated for entries in a group.
+                    status = mem_db.statuses[group[0].status_id]
+                    elapsed = cur_time - status.last_status
+                    if status_type != STATUS_DEALT:
+                        if elapsed < mon_freq:
+                            break
+
+                    # Check for worker timeout.
+                    if status_type == STATUS_DEALT:
+                        if elapsed < WORKER_TIMEOUT:
+                            break
+
+                    # Otherwise: allocate it as work.
+                    wq.move_work(group_id, STATUS_DEALT)
+                    return list_x_to_dict(group)
+                
+    return []
+
+def update_table_ip(mem_db, table_type: int, ip: str, alias_id: int, current_time: int):
+    for record in mem_db.records_by_aliases[alias_id]:
+        # Skip records that don't match the table type.
+        if record.table_type != table_type:
+            continue
+
+        # SKip disabled records.
+        status = mem_db.statuses[record.status_id]
+        if status.status == STATUS_DISABLED:
+            continue
+
+        # 1) If current IP is invalid set new IP.
+        try:
+            ensure_ip_is_public(record.ip)
+        except:
+            record.ip = ip
+            continue
+
+        # 2) If import and its never been checked set new IP.
+        if table_type == IMPORTS_TABLE_TYPE:
+            if not status.test_no:
+                record.ip = ip
+                continue
+
+        # 3) Otherwise only update if there's a period of downtime.
+        # This prevents servers from constantly changing IPs.
+        cond_one = cond_two = False
+        if not status.last_success and not status.last_uptime:
+            if status.test_no >= 2:
+                cond_one = True
+        if status.last_success:
+            elapsed = current_time - status.last_uptime
+            if elapsed > (MAX_SERVER_DOWNTIME * 2):
+                cond_two = True
+
+        # Only set ip if there's a period of downtime.
+        if cond_one or cond_two:
+            record.ip = ip

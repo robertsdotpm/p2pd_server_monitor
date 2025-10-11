@@ -55,9 +55,19 @@ async def api_delete_all():
         await delete_all_data(sqlite_db)
         await sqlite_db.commit()
 
+    return "done"
+
 @app.get("/insert_init", dependencies=[Depends(localhost_only)])
 async def api_insert_init():
     global server_cache
     mem_db.setup_db()
     insert_main(mem_db)
     server_cache = build_server_list(mem_db)
+    async with aiosqlite.connect(DB_NAME) as sqlite_db:
+        async with sqlite_db.execute("BEGIN"):
+            await delete_all_data(sqlite_db)
+            await sqlite_export(mem_db, sqlite_db)
+            
+        await sqlite_db.commit()
+
+    return "done"

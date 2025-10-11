@@ -1,0 +1,81 @@
+/etc/systemd/system/p2pd_monitor.service
+
+
+export MONITOR_WORKER_NO=5
+
+sudo systemctl daemon-reload
+sudo systemctl enable p2pd_monitor
+sudo systemctl start p2pd_monitor
+sudo journalctl -u p2pd_monitor -f
+
+I'll put notes here.
+
+Priority:
+    -- add a list of servers
+    -- integration
+    -- merge and publish
+
+future:
+    -- technically A and AAA dns can map to a list of IPs so my data structure for
+    aliases are wrong but lets roll with it to start with since its simple.
+    -- some servers have additional meta data like even PNP has oub keys and turn
+    has realms?
+    -- some dns servers return different ips each time. do you want ips to change
+    for servers? a dns might represent a cluster. maybe still works depending
+    on the protocol.
+
+    -- cleanup ideas:
+        -- delete old rows that havent been updated in a while
+        -- dont delete import on complete -- disable it
+
+edge case:
+    - negative uptimes possible if time manually set in the past but this is
+    still useful for tests and these APIs wont be public
+
+    having to load all the dns names before imports for IPs is very slow
+    maybe i should cache this somehow
+
+    figure out how to get stdout for worker processes logged
+
+    could make a change to work allocat1on to force complet1on of
+    al1as work f1rst before hand1ng out 1mports or serv1ce work. then
+    just remove the al1as resolv stuff before 1mports.
+        -- move it to the clients -- make it choose alias work, keep looping until
+        no work, then sleep for N, before resuming regular work (no specification)
+
+    -- cleanup that status_id update logic since you always seem to want to do
+    that in all cases?
+
+    -- theres no port in the server results
+    -- make it so you can run do_imports multiple times and it wont interfer with
+    existing records
+    -- time work and sleep if its too fast -- theres locking errors on aliases rn
+    since the work finishes too fast
+        -- sleep for rand secs so it spreads out
+        -- add other tricks for database locks
+            -- if db lock on /work catch exception and return special status to client
+            so client knows to retry after a delay
+                -- theres no validation of server out and if it errors the
+                clients just go into a spam loop
+    -- inital /server results some have quality score set to 0
+
+    I think I could refactor this whole thing to use in-memory databases
+
+
+    overview:
+    - I insert a bunch of STUN map servers
+        - any record that is associated with a FQN gets an alias
+    - Aliases are input as records
+    - All records have a status
+        - Aliases, imports, and services
+    - When aliases are updated the update should
+        - update the alias record
+        - update the IP for the import and services record.
+    - dont write tests that depend on other processes to run because they're
+    not deterministic and too hard to verify -- do it all with data structs
+
+    Ideas for new tests to write:
+    - store a list of fqn: ip mappings and update them.
+        - then check associated records have aliases set
+        - do this using the alias_update api
+    
