@@ -110,12 +110,6 @@ async def sqlite_import(mem_db):
                 if getattr(obj, "ip", None):
                     mem_db.records_by_ip.setdefault(obj.ip, []).append(obj)
 
-        # Rebuild meta_group structure for services.
-        for table_type in group_maps:
-            for group_id in group_maps[table_type]:
-                group = group_maps[table_type][group_id]
-                mem_db.add_work(group[0].af, table_type, group, group_id)
-
     # After loading all tables
     for status in mem_db.statuses.values():
         table_type = status.table_type
@@ -126,3 +120,10 @@ async def sqlite_import(mem_db):
         if record:
             record.status_id = status.id
 
+    # Rebuild meta_group structure for services.
+    for table_type in group_maps:
+        for group_id in group_maps[table_type]:
+            group = group_maps[table_type][group_id]
+            status_id = group[0].status_id
+            status = mem_db.statuses[status_id].status
+            mem_db.add_work(group[0].af, table_type, group, group_id, status)
