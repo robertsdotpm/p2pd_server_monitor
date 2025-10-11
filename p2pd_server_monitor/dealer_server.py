@@ -34,6 +34,10 @@ async def main():
     global refresh_task
     global mem_db
     await sqlite_import(mem_db)
+
+    # Merge CSV file imports with current mem DB.
+    insert_main(mem_db)
+
     refresh_task = asyncio.create_task(refresh_server_cache())
 
 # Hands out work (servers to check) to worker processes.
