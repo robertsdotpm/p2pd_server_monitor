@@ -20,8 +20,8 @@ class UniqueIndex:
         """
         key = []
         for f in self.key_fields:
-            if f == "fqn_or_ip":
-                key.append(getattr(obj, "fqn", None) or getattr(obj, "ip", None))
+            if f == "alias_id_or_ip":
+                key.append(getattr(obj, "alias_id", None) or getattr(obj, "ip", None))
             else:
                 key.append(getattr(obj, f, None))
         return tuple(key)

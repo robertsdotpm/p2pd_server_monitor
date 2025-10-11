@@ -133,7 +133,7 @@ async def imports_monitor(nic, pending_insert):
                 "port": int(server[4]),
                 "user": server[5],
                 "password": server[6],
-                "alias_id": pending_insert[0]["alias_id"],
+                "alias_id": int(pending_insert[0]["alias_id"]),
                 "score": 0
             })
 

@@ -81,3 +81,5 @@ edge case:
     
     - decide to what extent fqns should be set for services.
         - alias_id presently not being set for any services on reimport
+
+    ordering in imports and exports -- alias needs to be first

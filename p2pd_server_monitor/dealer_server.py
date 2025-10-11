@@ -15,23 +15,26 @@ mem_db = MemDB()
 server_cache = []
 refresh_task = None
 
+async def save_all(mem_db):
+    async with aiosqlite.connect(DB_NAME) as sqlite_db:
+        try:
+            await sqlite_db.execute("BEGIN")
+            await delete_all_data(sqlite_db)
+            await sqlite_export(mem_db, sqlite_db)
+        except Exception:
+            what_exception()
+            log_exception()
+            await sqlite_db.rollback()
+            raise
+        else:
+            await sqlite_db.commit()
+
 async def refresh_server_cache():
     global server_cache
     global mem_db
     while True:
         server_cache = build_server_list(mem_db)
-        async with aiosqlite.connect(DB_NAME) as sqlite_db:
-            try:
-                await sqlite_db.execute("BEGIN")
-                await delete_all_data(sqlite_db)
-                await sqlite_export(mem_db, sqlite_db)
-            except Exception:
-                log_exception()
-                await sqlite_db.rollback()
-                raise
-            else:
-                await sqlite_db.commit()
-
+        await save_all(mem_db)
         await asyncio.sleep(60)
 
 @app.on_event("startup")
@@ -44,6 +47,11 @@ async def main():
     insert_main(mem_db)
 
     refresh_task = asyncio.create_task(refresh_server_cache())
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    print("Server is stopping... cleaning up resources")
+    await save_all(mem_db)
 
 # Hands out work (servers to check) to worker processes.
 @app.post("/work", dependencies=[Depends(localhost_only)])

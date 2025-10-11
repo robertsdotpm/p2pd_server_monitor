@@ -1,4 +1,5 @@
 from dataclasses import asdict, fields, is_dataclass
+from collections import OrderedDict
 import aiosqlite
 import sqlite3
 from .dealer_defs import *
@@ -63,6 +64,7 @@ async def sqlite_export(mem_db, sqlite_db):
             try:
                 await insert_object(sqlite_db, table_name, entry)
             except sqlite3.IntegrityError as e:
+                what_exception()
                 continue
             except:
                 log_exception()
@@ -76,11 +78,11 @@ async def sqlite_import(mem_db):
             mem_db.statuses[status.id] = status
 
         # Used to rebuild groups table.
-        group_maps = {
+        group_maps = OrderedDict({
             ALIASES_TABLE_TYPE: {},
             IMPORTS_TABLE_TYPE: {},
             SERVICES_TABLE_TYPE: {}
-        }
+        })
 
         # 2. Load main tables.
         for table_type in group_maps:

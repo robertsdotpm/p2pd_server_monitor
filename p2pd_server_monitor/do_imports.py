@@ -56,7 +56,6 @@ def insert_main(db):
             break
             
         file_path = file_name
-        print(file_path)
         if not os.path.exists(file_path):
             print("Could not find file: ", file_path)
             continue

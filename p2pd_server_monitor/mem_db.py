@@ -1,5 +1,6 @@
 import time
 from typing import Any
+from collections import OrderedDict
 from .dealer_defs import *
 from .work_queue import *
 from .mem_db_defs import *
@@ -36,25 +37,25 @@ class MemDB():
                 "type",
                 "af",
                 "proto",
-                "fqn_or_ip",
+                "alias_id_or_ip",
                 "port"
             ]),
             IMPORTS_TABLE_TYPE: UniqueIndex([
                 "type",
                 "af",
                 "proto",
-                "fqn_or_ip",
+                "alias_id_or_ip",
                 "port"
             ])
         }
 
         # Table name mappings.
-        self.tables = {
-            SERVICES_TABLE_TYPE: self.records[SERVICES_TABLE_TYPE],
+        self.tables = OrderedDict({
             ALIASES_TABLE_TYPE: self.records[ALIASES_TABLE_TYPE],
             IMPORTS_TABLE_TYPE: self.records[IMPORTS_TABLE_TYPE],
+            SERVICES_TABLE_TYPE: self.records[SERVICES_TABLE_TYPE],
             STATUS_TABLE_TYPE: self.statuses
-        }
+        })
 
     def add_id(self, table_type, n):
         if self.id_max[table_type] < n:
