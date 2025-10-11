@@ -21,11 +21,16 @@ async def refresh_server_cache():
     while True:
         server_cache = build_server_list(mem_db)
         async with aiosqlite.connect(DB_NAME) as sqlite_db:
-            async with sqlite_db.execute("BEGIN"):
+            try:
+                await sqlite_db.execute("BEGIN")
                 await delete_all_data(sqlite_db)
                 await sqlite_export(mem_db, sqlite_db)
-
-            await sqlite_db.commit()
+            except Exception:
+                log_exception()
+                await sqlite_db.rollback()
+                raise
+            else:
+                await sqlite_db.commit()
 
         await asyncio.sleep(60)
 
@@ -127,7 +132,11 @@ def api_update_alias(data: AliasUpdateReq):
         raise Exception("Alias id not found.")
     
     alias = mem_db.records[ALIASES_TABLE_TYPE][alias_id]
+
+    # Update alias by IP mappings.
+    mem_db.del_alias_by_ip(alias)
     alias.ip = ip
+    mem_db.add_alias_by_ip(alias)
 
     for table_type in (IMPORTS_TABLE_TYPE, SERVICES_TABLE_TYPE):
         update_table_ip(mem_db, table_type, ip, alias_id, current_time)

@@ -1,4 +1,6 @@
 import math
+import time
+import json
 from fastapi.responses import JSONResponse
 from fastapi import Request, HTTPException
 from p2pd import *
@@ -31,8 +33,8 @@ def compute_service_score(status, max_uptime_override=None):
         max_uptime = float(max_uptime_override)
     
     # Avoid division by zero
-    uptime_ratio = (uptime / max_uptime) if max_uptime > 0 else 1.0
-    
+    uptime_ratio = (uptime / max_uptime) if max_uptime > 0 else 0.0
+    uptime_ratio = min(max(uptime_ratio, 0.0), 1.0)
     quality_score = (
         (1.0 - failed_tests / (test_no + 1e-9)) * 
         (0.5 * uptime_ratio + 0.5) *
@@ -40,6 +42,18 @@ def compute_service_score(status, max_uptime_override=None):
     )
     
     return quality_score
+
+def get_fqn_list(mem_db, ip):
+    if ip is None:
+        return []
+    
+    fqns = set()
+    if ip in mem_db.aliases_by_ip:
+        for alias in mem_db.aliases_by_ip[ip]:
+            if alias.fqn is not None:
+                fqns.add(alias.fqn)
+
+    return list(fqns)[::-1]
 
 def build_server_list(mem_db):
     # Init server list.
@@ -65,11 +79,13 @@ def build_server_list(mem_db):
                 record[k] = status[k]
 
             record["score"] = compute_service_score(status)
+            record["fqns"] = get_fqn_list(mem_db, record["ip"])
             scores.append(record["score"])
 
-        score_avg = sum(scores) / len(scores)
-        for record in group:
-            record["score"] = score_avg
+        if len(scores):
+            score_avg = sum(scores) / len(scores)
+            for record in group:
+                record["score"] = score_avg
 
         service_type = TXTS[group[0]["type"]]
         af = TXTS["af"][group[0]["af"]]

@@ -102,13 +102,10 @@ async def sqlite_import(mem_db):
                 mem_db.uniques[table_type].add(obj)
                 if table_name == "aliases":
                     mem_db.records_by_aliases[obj.id] = []
+                    mem_db.add_alias_by_ip(obj)
                 else:
                     if obj.alias_id is not None:
                         mem_db.records_by_aliases[obj.alias_id].append(obj)
-
-                # Rebuild records_by_ip mapping
-                if getattr(obj, "ip", None):
-                    mem_db.records_by_ip.setdefault(obj.ip, []).append(obj)
 
     # After loading all tables
     for status in mem_db.statuses.values():

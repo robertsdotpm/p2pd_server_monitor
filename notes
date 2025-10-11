@@ -79,3 +79,5 @@ edge case:
         - then check associated records have aliases set
         - do this using the alias_update api
     
+    - decide to what extent fqns should be set for services.
+        - alias_id presently not being set for any services on reimport

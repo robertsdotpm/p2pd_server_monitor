@@ -64,10 +64,15 @@ async def api_insert_init():
     insert_main(mem_db)
     server_cache = build_server_list(mem_db)
     async with aiosqlite.connect(DB_NAME) as sqlite_db:
-        async with sqlite_db.execute("BEGIN"):
+        try:
+            await sqlite_db.execute("BEGIN")
             await delete_all_data(sqlite_db)
             await sqlite_export(mem_db, sqlite_db)
-            
-        await sqlite_db.commit()
+        except:
+            log_exception()
+            await sqlite_db.rollback()
+            raise
+        else:
+            await sqlite_db.commit()
 
     return "done"

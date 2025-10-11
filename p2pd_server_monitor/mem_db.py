@@ -27,7 +27,7 @@ class MemDB():
         self.id_max[GROUPS_TABLE_TYPE] = 0
         self.id_max[STATUS_TABLE_TYPE] = 0
         self.records_by_aliases = {}
-        self.records_by_ip = {}
+        self.aliases_by_ip = {}
 
         # Unique indexes.
         self.uniques = {
@@ -63,6 +63,26 @@ class MemDB():
     def get_id(self, table_type):
         self.id_max[table_type] += 1
         return self.id_max[table_type]
+
+    def add_alias_by_ip(self, alias):
+        if alias.ip is None:
+            return
+        
+        if alias.ip not in self.aliases_by_ip:
+            self.aliases_by_ip[alias.ip] = []
+
+        if alias not in self.aliases_by_ip[alias.ip]:
+            self.aliases_by_ip[alias.ip].append(alias)
+
+    def del_alias_by_ip(self, alias):
+        if alias.ip is None:
+            return
+        
+        if alias.ip not in self.aliases_by_ip:
+            return
+        
+        if alias in self.aliases_by_ip[alias.ip]:
+            self.aliases_by_ip[alias.ip].remove(alias)
 
     def add_work(self, af: int, table_type: int, group: Any, group_id=None, status_type=STATUS_INIT):
         # Save this as a new "group".
@@ -125,6 +145,10 @@ class MemDB():
         # Record the new alias.
         self.records[ALIASES_TABLE_TYPE][alias_id] = alias
         self.records_by_aliases[alias_id] = []
+
+        # Record the IP.
+        if ip is not None:
+            self.add_alias_by_ip(alias)
 
         # Create a new status entry for this.
         status = self.init_status_row(alias_id, ALIASES_TABLE_TYPE)
