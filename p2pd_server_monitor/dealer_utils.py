@@ -98,7 +98,7 @@ def build_server_list(mem_db):
                 by_service = s[TXTS[service_type]]
                 by_af = by_service[TXTS["af"][af]]
                 by_proto = by_af[TXTS["proto"][proto]]
-                by_proto.sort(key=lambda x: x[0]["score"])
+                by_proto.sort(key=lambda x: x[0]["score"], reverse=True)
 
     s["timestamp"] = int(time.time())
     return s

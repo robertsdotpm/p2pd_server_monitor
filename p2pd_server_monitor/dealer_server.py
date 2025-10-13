@@ -1,6 +1,7 @@
 import uvicorn
 import aiosqlite
 from fastapi import FastAPI, Depends
+from fastapi.responses import Response
 from p2pd import *
 from typing import List
 from .dealer_utils import *
@@ -13,6 +14,7 @@ from .do_imports import *
 app = FastAPI(default_response_class=PrettyJSONResponse)
 mem_db = MemDB()
 server_cache = []
+server_list_str = ""
 refresh_task = None
 
 async def save_all(mem_db):
@@ -30,10 +32,17 @@ async def save_all(mem_db):
             await sqlite_db.commit()
 
 async def refresh_server_cache():
+    global server_list_str
     global server_cache
     global mem_db
     while True:
         server_cache = build_server_list(mem_db)
+        server_list_str = json.dumps(
+            server_cache,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=2,        # pretty-print here
+        ).encode("utf-8")
         await save_all(mem_db)
         await asyncio.sleep(60)
 
@@ -155,7 +164,7 @@ def api_update_alias(data: AliasUpdateReq):
 # Only public API is this one.
 @app.get("/servers")
 async def api_list_servers():
-    return server_cache
+    return Response(content=server_list_str, media_type="application/json")
 
 if IS_DEBUG:
     exec(open("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/dealer_test_apis.py").read(), globals())

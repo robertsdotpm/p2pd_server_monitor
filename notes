@@ -83,3 +83,12 @@ edge case:
         - alias_id presently not being set for any services on reimport
 
     ordering in imports and exports -- alias needs to be first
+
+    - do a cleanup step after resolve aliases where you filter out all imports
+    that use only IPs but show up in aliases -- implying another entry is
+    already referencing the same service
+
+SELECT *
+FROM imports
+WHERE alias_id IS NULL
+  AND ip NOT IN (SELECT ip FROM alias WHERE ip IS NOT NULL);
