@@ -32,3 +32,6 @@
 0,3478,stun.wiretrustee.com,some_user,c29tZV9wYXNzd29yZA==
 0,3478,webrtc.free-solutions.org,tatafutz,turnuser
 0,80,openrelay.metered.ca,openrelayproject,openrelayproject
+0,443,turn.threema.ch,threema-angular,Uv0LcCq3kyx6EiRwQW5jVigkhzbp70CjN2CJqzmRxG3UGIdJHSJV6tpo7Gj7YnGB
+0,443,turn.obs.ninja,steve,setupYourOwnPlease
+0,3478,stun.contus.us,contus,SAE@admin
