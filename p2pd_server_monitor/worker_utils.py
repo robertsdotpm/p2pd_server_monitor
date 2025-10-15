@@ -259,7 +259,7 @@ async def validate_service_import(nic, pending_insert, service_monitor):
                     pending_insert["ip"],
                     pending_insert["port"],
                     pending_insert["user"],
-                    pending_insert["pass"],
+                    pending_insert["password"],
                 ]
             ]]
 

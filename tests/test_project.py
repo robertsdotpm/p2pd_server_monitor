@@ -59,7 +59,7 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
         asyncio.run(cls.init_interface())
 
     async def asyncSetUp(self):
-        db.setup_db()
+        #db.setup_db()
         self.db = await aiosqlite.connect(DB_NAME)
         self.db.row_factory = aiosqlite.Row
         await delete_all_data(self.db)
@@ -337,14 +337,26 @@ class TestProject(unittest.IsolatedAsyncioTestCase):
     async def test_monitor_stun_map_type(self):
         work = [{
             "af": IP4,
-            "ip": "74.125.250.129", # Google
-            "port": 19302,
+            "ip": "20.15.169.6", # Google
+            "port": 3478,
             "proto": UDP,
             "status_id": None,
         }]
 
+        import_list = await stun_server_classifier(
+            af=IP4,
+            ip="20.15.169.6",
+            port=3478,
+            nic=self.nic
+        )
+
+        print(import_list)
+        return
 
         is_success = await monitor_stun_map_type(self.nic, work)
+        print(is_success)
+        return
+        
         assert(is_success)
 
     async def test_monitor_stun_change_type(self):

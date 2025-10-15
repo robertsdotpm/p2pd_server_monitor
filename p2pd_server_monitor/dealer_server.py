@@ -1,6 +1,7 @@
 import uvicorn
 import aiosqlite
-from fastapi import FastAPI, Depends
+import threading
+from fastapi import FastAPI, Depends, Request
 from fastapi.responses import Response
 from p2pd import *
 from typing import List
@@ -16,6 +17,7 @@ mem_db = MemDB()
 server_cache = []
 server_list_str = ""
 refresh_task = None
+db_lock = threading.Lock()
 
 async def save_all(mem_db):
     async with aiosqlite.connect(DB_NAME) as sqlite_db:
@@ -45,6 +47,14 @@ async def refresh_server_cache():
         ).encode("utf-8")
         await save_all(mem_db)
         await asyncio.sleep(60)
+
+@app.middleware("http")
+async def no_cache_middleware(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @app.on_event("startup")
 async def main():

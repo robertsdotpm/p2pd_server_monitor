@@ -5,9 +5,10 @@ from .db_init import *
 
 service_lookup = {
     "stun": STUN_MAP_TYPE,
+    "mqtt": MQTT_TYPE,
 }
 
-file_names = ("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v6.csv",)
+file_names = ("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v6.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/mqtt_v4.csv")
 
 def insert_from_lines(af, import_type, lines, db):
     import_list = []

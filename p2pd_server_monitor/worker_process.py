@@ -139,6 +139,9 @@ async def main(nic=None):
     nic = nic or Interface.from_dict(if_info)
     print("Interface loaded: ", nic)
 
+    # Workers start randomly over the next min to avoid traffic surges.
+    #await sleep_random(1000, 60000)
+
     endpoint = ("127.0.0.1", 8000,)
     route = nic.route(IP4)
     curl = WebCurl(endpoint, route)
@@ -150,6 +153,7 @@ async def main(nic=None):
         curl,
         table_type=ALIASES_TABLE_TYPE
     )
+
 
     # Give time for all DNS requests to finish.
     await asyncio.sleep(3)

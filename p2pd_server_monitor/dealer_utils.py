@@ -114,7 +114,10 @@ def mark_complete(mem_db, is_success: int, status_id: int, t=None):
     status = mem_db.statuses[status_id]
     table_type = status.table_type
     if table_type == IMPORTS_TABLE_TYPE:
-        status_type = STATUS_DISABLED
+        if status.test_no >= IMPORT_TEST_NO:
+            status_type = STATUS_DISABLED
+        if is_success:
+            status_type = STATUS_DISABLED
 
     # Remove from dealt queue.
     record = mem_db.records[table_type][status.row_id]
@@ -159,8 +162,21 @@ def allocate_work(mem_db, need_afs, table_types, cur_time, mon_freq):
             wq = mem_db.work[table_choice][need_af]
             for status_type in (STATUS_INIT, STATUS_AVAILABLE, STATUS_DEALT,):
                 for group_id, meta_group in wq.queues[status_type]:
-                    assert(meta_group)
                     group = meta_group.group
+
+                    # Check that work IPs are all resolved.
+                    
+                    if table_choice != ALIASES_TABLE_TYPE:
+                        null_ip = False
+                        for entry in group:
+                            if entry.ip is None:
+                                null_ip = True
+                                break
+                        
+                        # If they're not then skip.
+                        if null_ip:
+                            continue
+                    
 
                     # Never been allocated so safe to hand out.
                     if status_type == STATUS_INIT:

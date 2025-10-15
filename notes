@@ -88,6 +88,11 @@ edge case:
     that use only IPs but show up in aliases -- implying another entry is
     already referencing the same service
 
+
+    - currently service stun map can have one ip with different ports,
+    maybe port should be removed from the uniqueness tup for service
+    
+
 SELECT *
 FROM imports
 WHERE alias_id IS NULL

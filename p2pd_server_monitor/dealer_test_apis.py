@@ -6,6 +6,10 @@ from .dealer_utils import *
 @app.get("/list_groups")
 async def api_list_groups():
     return mem_db.groups
+
+@app.get("/list_records")
+async def api_list_groups():
+    return mem_db.records
     
 @app.get("/concurrency_test", dependencies=[Depends(localhost_only)])
 async def api_concurrency_test():
@@ -51,6 +55,8 @@ async def api_sql_import():
 
 @app.get("/delete_all", dependencies=[Depends(localhost_only)])
 async def api_delete_all():
+    global mem_db
+    mem_db = MemDB()
     async with aiosqlite.connect(DB_NAME) as sqlite_db:
         await delete_all_data(sqlite_db)
         await sqlite_db.commit()

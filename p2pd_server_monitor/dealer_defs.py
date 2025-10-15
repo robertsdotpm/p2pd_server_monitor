@@ -8,6 +8,7 @@ WORKER_TIMEOUT = 120
 MONITOR_FREQUENCY = 60 * 60
 MONITOR_FREQUENCY = 60 * 60 # Just temp for testing.
 MAX_SERVER_DOWNTIME = 600
+IMPORT_TEST_NO = 3 # Try to import items 3 times then stop.
 
 ####################################################################################
 SERVICE_SCHEMA = ("type", "af", "proto", "ip", "port", "group_id")
