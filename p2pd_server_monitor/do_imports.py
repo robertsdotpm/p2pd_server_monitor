@@ -6,9 +6,10 @@ from .db_init import *
 service_lookup = {
     "stun": STUN_MAP_TYPE,
     "mqtt": MQTT_TYPE,
+    "turn": TURN_TYPE,
 }
 
-file_names = ("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v6.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/mqtt_v4.csv")
+file_names = ("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v6.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/mqtt_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/mqtt_v6.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/turn_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/turn_v6.csv")
 
 def insert_from_lines(af, import_type, lines, db):
     import_list = []
@@ -18,17 +19,21 @@ def insert_from_lines(af, import_type, lines, db):
             parts = line.split(",")
             ip = None if parts[0] in ("0", "") else parts[0]
             port = parts[1]
-            fqn = None
+            user = password = fqn = None
             if len(parts) > 2:
                 fqn = parts[2]
+            if len(parts) > 3:
+                user = parts[3]
+            if len(parts) > 4:
+                password = parts[4]
 
             import_record = {
                 "import_type": import_type,
                 "af": int(af),
                 "ip": ip,
                 "port": int(port),
-                "user": None,
-                "password": None,
+                "user": user,
+                "password": password,
                 "fqn": fqn
             }
 
