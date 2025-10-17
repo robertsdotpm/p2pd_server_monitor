@@ -85,6 +85,7 @@ def build_server_list(mem_db):
                 continue
 
             scores = []
+            fields = ("test_no", "failed_tests", "uptime", "max_uptime", "last_success")
             group = list_x_to_dict(meta_group.group)
             for record in group:
                 try:
@@ -93,7 +94,8 @@ def build_server_list(mem_db):
                         continue
                     status = getattr(status_obj, "dict", lambda: {})()
 
-                    for k in ("uptime", "max_uptime", "last_success"):
+
+                    for k in fields:
                         record[k] = status.get(k, 0)
 
                     record["score"] = compute_service_score(status)
@@ -210,11 +212,12 @@ def allocate_work(mem_db, need_afs, table_types, cur_time, mon_freq):
                         if elapsed < mon_freq:
                             break
 
-                    # Check for worker timeout.
+                    # Check for worker timeout.sd
+                    # TODO: this line is making work get reallocated.
                     if status_type == STATUS_DEALT:
                         if elapsed < WORKER_TIMEOUT:
                             break
-
+                            
                     # Otherwise: allocate it as work.
                     wq.move_work(group_id, STATUS_DEALT)
                     return list_x_to_dict(group)

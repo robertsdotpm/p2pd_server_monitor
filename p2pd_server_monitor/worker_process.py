@@ -67,16 +67,16 @@ async def worker(nic, curl, init_work=None, table_type=None):
             imports_list = await imports_monitor(nic, work)
 
             # Otherwise do imports.
-            params = {
-                "imports_list": imports_list,
-                "status_id": int(work[0]["status_id"]),
-            }
-            await retry_curl_on_locked(curl, params, "/insert")
+            if imports_list:
+                params = {
+                    "imports_list": imports_list,
+                    "status_id": int(work[0]["status_id"]),
+                }
+                await retry_curl_on_locked(curl, params, "/insert")
 
-            if not is_success:
-                print("Offline -- not importing")
-            else:
                 print("Found -- importing new servers")
+            else:
+                print("Not importing.")
 
         if table_type == SERVICES_TABLE_TYPE:
             is_success = await service_monitor(nic, work)
@@ -108,33 +108,24 @@ async def worker(nic, curl, init_work=None, table_type=None):
         return 0, status_ids
 
 async def process_work(nic, curl, table_type=None, stagger=False):
-    while True:
-        await sleep_random(100, 4000)
+    await sleep_random(100, 4000)
 
-        # Execute work from the dealer server.
-        start_time = time.perf_counter()
-        is_success, status_ids = await worker(nic, curl, table_type=table_type)
+    # Execute work from the dealer server.
+    start_time = time.perf_counter()
+    is_success, status_ids = await worker(nic, curl, table_type=table_type)
+    if is_success == NO_WORK:
+        await asyncio.sleep(5 * 60)
 
-        # Update statuses.
-        await async_wrap_errors(
-            update_work_status(curl, status_ids, is_success)
-        )
+    # Update statuses.
+    await async_wrap_errors(
+        update_work_status(curl, status_ids, is_success)
+    )
 
-        # If work finished too fast -- add a sleep to avoid DoSing server.     
-        exec_elapsed = time.perf_counter() - start_time
-        if exec_elapsed <= 0.5:
-            ms = int(exec_elapsed * 1000)
-            await sleep_random(max(100, 500 - ms), 1000)
-
-        #continue
-
-        # Wait for more work or exit.
-        if is_success == NO_WORK:
-            if stagger:
-                print("Sleeping for a few mins...")
-                await sleep_random(30000, 60000)
-            else:
-                break
+    # If work finished too fast -- add a sleep to avoid DoSing server.     
+    exec_elapsed = time.perf_counter() - start_time
+    if exec_elapsed <= 0.5:
+        ms = int(exec_elapsed * 1000)
+        await sleep_random(max(100, 500 - ms), 1000)
 
 async def main(nic=None):
     print("Loading interface...")
@@ -148,27 +139,17 @@ async def main(nic=None):
     route = nic.route(IP4)
     curl = WebCurl(endpoint, route)
 
-    # Keep processing alias work until done.
-    # This allows for distributed DNS resolution for imports.
-    await process_work(
-        nic,
-        curl,
-        table_type=ALIASES_TABLE_TYPE
-    )
-
-
-    # Give time for all DNS requests to finish.
-    await asyncio.sleep(3)
-
     """
     If there's many items in a work queue then the workers might never get
     to the end of it before moving to the next queue. So the queue to process
     is chosen randomly with a bias towards services.
     """
-    tables = ((SERVICES_TABLE_TYPE,) * 4) + (ALIASES_TABLE_TYPE, IMPORTS_TABLE_TYPE,)
+    tables = (SERVICES_TABLE_TYPE, IMPORTS_TABLE_TYPE, ALIASES_TABLE_TYPE,)
+    table = random.choice(tables)
     while 1:
-        table = random.choice(tables)
-        await process_work(nic, curl, table_type=table)
+        await async_wrap_errors(
+            process_work(nic, curl, table_type=table)
+        )
 
     # Give time for event loop to finish.
     await asyncio.sleep(2)

@@ -45,10 +45,10 @@ async def refresh_server_cache():
             server_list_str = json.dumps(
                 server_cache,
                 indent=4,
-                sort_keys=True,
+                sort_keys=False,
                 default=str
             )
-            
+
             await save_all(mem_db)
         except:
             log_exception()
@@ -125,6 +125,7 @@ def api_work_done(payload: WorkDoneReq):
 
 @app.post("/insert", dependencies=[Depends(localhost_only)])
 def api_insert_services(payload: InsertServicesReq):
+    print(payload)
     for groups in payload.imports_list:
         try:
             records = []

@@ -129,11 +129,21 @@ async def imports_monitor(nic, pending_insert):
         service_monitor
     )
 
+    if pending_insert[0]["alias_id"] is not None:
+        alias_id = int(pending_insert[0]["alias_id"])
+    else:
+        alias_id = None
+
     # Create a list of groups (a group can have one or more related services.)
     imports_list = []
+    
     for validated_list in validated_lists:
         services = []
         for server in validated_list:
+            print(validated_list)
+            if server[0] is None:
+                continue
+
             services.append({
                 "service_type": int(server[0]),
                 "af": int(server[1]),
@@ -142,7 +152,7 @@ async def imports_monitor(nic, pending_insert):
                 "port": int(server[4]),
                 "user": server[5],
                 "password": server[6],
-                "alias_id": int(pending_insert[0]["alias_id"]),
+                "alias_id": alias_id,
                 "score": 0
             })
 

@@ -39,7 +39,7 @@ class WorkQueue:
         if work_id in self.index:
             raise KeyError(f"add_work: Work ID {work_id} already added.")
         
-        node = self.queues[queue_name].prepend((work_id, payload))
+        node = self.queues[queue_name].append((work_id, payload))
         self.index[work_id] = (queue_name, node)
         self.timestamps[work_id] = int(time.time())
 
@@ -53,7 +53,7 @@ class WorkQueue:
         self.queues[from_queue].remove(node)
 
         # Add to end of target linked_list.
-        new_node = self.queues[queue_name].prepend(node.value)
+        new_node = self.queues[queue_name].append(node.value)
         self.index[work_id] = (queue_name, new_node)
         self.timestamps[work_id] = int(time.time())
 
