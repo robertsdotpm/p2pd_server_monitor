@@ -228,7 +228,7 @@ async def update_work_status(curl, status_ids, is_success):
 
     if len(statuses):
         params = {"statuses": statuses}
-        await retry_curl_on_locked(curl, params, "/complete", retries=None)
+        await retry_curl_on_locked(curl, params, "/complete")
         #print(out.out)
 
 async def validate_service_import(nic, pending_insert, service_monitor):

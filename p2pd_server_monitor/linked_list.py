@@ -13,6 +13,19 @@ class LinkedList:
         self.tail = None
         self.count = 0
 
+    def prepend(self, value):
+        """Add value to start of the linked list and return its node."""
+        node = Node(value)
+        if not self.head:
+            self.head = self.tail = node
+        else:
+            node.next = self.head
+            self.head.prev = node
+            self.head = node
+
+        self.count += 1
+        return node
+
     def append(self, value):
         """Append value to the end and return its node."""
         node = Node(value)

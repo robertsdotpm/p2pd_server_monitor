@@ -91,7 +91,9 @@ edge case:
 
     - currently service stun map can have one ip with different ports,
     maybe port should be removed from the uniqueness tup for service
-    
+
+    - ntp ipv6 not working
+    000001 for ipv6 not detected as private
 
 SELECT *
 FROM imports

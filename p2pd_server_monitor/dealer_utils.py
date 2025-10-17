@@ -164,20 +164,6 @@ def allocate_work(mem_db, need_afs, table_types, cur_time, mon_freq):
                 for group_id, meta_group in wq.queues[status_type]:
                     group = meta_group.group
 
-                    # Check that work IPs are all resolved.
-                    
-                    if table_choice != ALIASES_TABLE_TYPE:
-                        null_ip = False
-                        for entry in group:
-                            if entry.ip is None:
-                                null_ip = True
-                                break
-                        
-                        # If they're not then skip.
-                        if null_ip:
-                            continue
-                    
-
                     # Never been allocated so safe to hand out.
                     if status_type == STATUS_INIT:
                         wq.move_work(group_id, STATUS_DEALT)
@@ -185,8 +171,14 @@ def allocate_work(mem_db, need_afs, table_types, cur_time, mon_freq):
 
                     # Work is moved back to available but don't do it too soon.
                     # Statuses are bulk updated for entries in a group.
-                    status = mem_db.statuses[group[0].status_id]
-                    elapsed = cur_time - status.last_status
+                    work_timestamp = wq.timestamps[group_id]
+                    elapsed = cur_time - work_timestamp
+                    if not work_timestamp or elapsed < 0:
+                        # Sanity check to avoid invalid results.
+                        continue
+
+                    # In time order with oldest first.
+                    # So if this isn't old enough then none are.
                     if status_type != STATUS_DEALT:
                         if elapsed < mon_freq:
                             break

@@ -17,6 +17,7 @@ delete. This is a very neat trick used by high performance schedulers.
 """
 
 from typing import Hashable, Any
+import time
 from .dealer_defs import *
 from .linked_list import *
 
@@ -31,14 +32,16 @@ class WorkQueue:
 
         # work_id -> (queue_name, node reference)
         self.index = {} 
+        self.timestamps = {}
 
     def add_work(self, work_id: Hashable, payload: Any, queue_name: int):
         # Avoid overwriting pre-existing work.
         if work_id in self.index:
             raise KeyError(f"add_work: Work ID {work_id} already added.")
         
-        node = self.queues[queue_name].append((work_id, payload))
+        node = self.queues[queue_name].prepend((work_id, payload))
         self.index[work_id] = (queue_name, node)
+        self.timestamps[work_id] = int(time.time())
 
     def move_work(self, work_id: Hashable, queue_name: int):
         # Work doesn't exist.
@@ -50,12 +53,14 @@ class WorkQueue:
         self.queues[from_queue].remove(node)
 
         # Add to end of target linked_list.
-        new_node = self.queues[queue_name].append(node.value)
+        new_node = self.queues[queue_name].prepend(node.value)
         self.index[work_id] = (queue_name, new_node)
+        self.timestamps[work_id] = int(time.time())
 
     def remove_work(self, work_id: Hashable):
         queue_name, node = self.index.pop(work_id)
         self.queues[queue_name].remove(node)
+        self.timestamps.pop(work_id, None)
 
     def pop_available(self):
         node = self.queues[STATUS_AVAILABLE].popleft()
@@ -64,6 +69,7 @@ class WorkQueue:
         
         work_id, payload = node.value
         self.index.pop(work_id, None)
+        self.timestamps.pop(work_id, None)
         return work_id, payload
 
 """

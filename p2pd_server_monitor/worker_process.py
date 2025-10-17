@@ -116,7 +116,9 @@ async def process_work(nic, curl, table_type=None, stagger=False):
         is_success, status_ids = await worker(nic, curl, table_type=table_type)
 
         # Update statuses.
-        await update_work_status(curl, status_ids, is_success)
+        await async_wrap_errors(
+            update_work_status(curl, status_ids, is_success)
+        )
 
         # If work finished too fast -- add a sleep to avoid DoSing server.     
         exec_elapsed = time.perf_counter() - start_time
@@ -158,11 +160,20 @@ async def main(nic=None):
     # Give time for all DNS requests to finish.
     await asyncio.sleep(3)
 
-    # Keep processing alias work until done.
-    await process_work(nic, curl, stagger=True)
+    """
+    If there's many items in a work queue then the workers might never get
+    to the end of it before moving to the next queue. So the queue to process
+    is chosen randomly with a bias towards services.
+    """
+    tables = ((SERVICES_TABLE_TYPE,) * 4) + (ALIASES_TABLE_TYPE, IMPORTS_TABLE_TYPE,)
+    while 1:
+        table = random.choice(tables)
+        await process_work(nic, curl, table_type=table)
 
     # Give time for event loop to finish.
     await asyncio.sleep(2)
         
 if __name__ == "__main__":
     asyncio.run(main())
+
+    # Scheduler doesnt track time itself... on changes

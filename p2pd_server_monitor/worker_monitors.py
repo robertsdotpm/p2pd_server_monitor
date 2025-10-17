@@ -83,12 +83,21 @@ async def monitor_turn_type(nic, work):
     return 0
 
 async def monitor_ntp_type(nic, work):
-    work[0]["host"] = work[0]["ip"]
-    resp = await get_ntp(nic, server=work[0])
-    if resp:
-        return 1
-    else:
-        return 0
+    try:
+        for _ in range(3):
+            client = NTPClient(nic)
+            response = await client.request(
+                (work[0]["ip"], work[0]["port"]),
+                version=3
+            )
+            if response is None:
+                continue
+
+            return 1
+    except Exception as e:
+        log_exception()
+
+    return 0
 
 async def service_monitor(nic, work):
     is_success = 0

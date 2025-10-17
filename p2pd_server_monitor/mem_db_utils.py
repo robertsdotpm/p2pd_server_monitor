@@ -125,4 +125,4 @@ async def sqlite_import(mem_db):
             group = group_maps[table_type][group_id]
             status_id = group[0].status_id
             status = mem_db.statuses[status_id].status
-            mem_db.add_work(group[0].af, table_type, group, group_id, status)
+            mem_db.add_work(group[0].af, table_type, group, group_id, STATUS_INIT)

@@ -38,14 +38,17 @@ async def refresh_server_cache():
     global server_cache
     global mem_db
     while True:
-        server_cache = build_server_list(mem_db)
-        server_list_str = json.dumps(
-            server_cache,
-            ensure_ascii=False,
-            allow_nan=False,
-            indent=2,        # pretty-print here
-        ).encode("utf-8")
-        await save_all(mem_db)
+        try:
+            server_cache = build_server_list(mem_db)
+            server_list_str = json.dumps(
+                server_cache,
+                ensure_ascii=False,
+                allow_nan=False,
+                indent=2,        # pretty-print here
+            ).encode("utf-8")
+            await save_all(mem_db)
+        except:
+            log_exception()
         await asyncio.sleep(60)
 
 @app.middleware("http")
@@ -60,10 +63,13 @@ async def no_cache_middleware(request: Request, call_next):
 async def main():
     global refresh_task
     global mem_db
-    await sqlite_import(mem_db)
+    try:
+        await sqlite_import(mem_db)
 
-    # Merge CSV file imports with current mem DB.
-    insert_main(mem_db)
+        # Merge CSV file imports with current mem DB.
+        insert_main(mem_db)
+    except:
+        log_exception()
 
     refresh_task = asyncio.create_task(refresh_server_cache())
 
