@@ -5,6 +5,7 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.responses import Response
 from p2pd import *
 from typing import List
+from pprint import pformat
 from .dealer_utils import *
 from .db_init import *
 from .txt_strs import *
@@ -40,12 +41,7 @@ async def refresh_server_cache():
     while True:
         try:
             server_cache = build_server_list(mem_db)
-            server_list_str = json.dumps(
-                server_cache,
-                ensure_ascii=False,
-                allow_nan=False,
-                indent=2,        # pretty-print here
-            ).encode("utf-8")
+            server_list_str = pformat(server_cache, indent=4)
             await save_all(mem_db)
         except:
             log_exception()

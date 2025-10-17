@@ -23,25 +23,38 @@ class PrettyJSONResponse(JSONResponse):
         ).encode("utf-8")
 
 def compute_service_score(status, max_uptime_override=None):
-    failed_tests = float(status.get("failed_tests", 0))
-    test_no = float(status.get("test_no", 0))
-    uptime = float(status.get("uptime", 0))
+    if not isinstance(status, dict) or status is None:
+        return 0.0
 
-    if max_uptime_override is None:
-        max_uptime = float(status.get("max_uptime", 0))
-    else: 
-        max_uptime = float(max_uptime_override)
-    
-    # Avoid division by zero
+    # Extract values, default to 0 if missing or None
+    failed_tests = status.get("failed_tests") or 0
+    test_no = status.get("test_no") or 0
+    uptime = status.get("uptime") or 0
+    if max_uptime_override is not None:
+        max_uptime = max_uptime_override
+    else:
+        if "max_uptime" in status and status["max_uptime"] is not None:
+            max_uptime = status["max_uptime"]
+        else:
+            max_uptime = 0
+
+    # Prevent negative numbers
+    failed_tests = max(failed_tests, 0)
+    test_no = max(test_no, 0)
+    uptime = max(uptime, 0)
+    max_uptime = max(max_uptime, 0)
+
+    # Compute uptime ratio safely
     uptime_ratio = (uptime / max_uptime) if max_uptime > 0 else 0.0
     uptime_ratio = min(max(uptime_ratio, 0.0), 1.0)
-    quality_score = (
-        (1.0 - failed_tests / (test_no + 1e-9)) * 
-        (0.5 * uptime_ratio + 0.5) *
-        (1.0 - math.exp(-test_no / 50.0))
-    )
-    
-    return quality_score
+
+    # Compute test factor safely
+    test_factor = 1.0 - failed_tests / (test_no + 1e-9)
+    smoothing_factor = 1.0 - math.exp(-test_no / 50.0)
+    quality_score = test_factor * (0.5 * uptime_ratio + 0.5) * smoothing_factor
+
+    # Clamp final score to [0,1]
+    return min(max(quality_score, 0.0), 1.0)
 
 def get_fqn_list(mem_db, ip):
     if ip is None:
@@ -56,49 +69,66 @@ def get_fqn_list(mem_db, ip):
     return list(fqns)[::-1]
 
 def build_server_list(mem_db):
-    # Init server list.
+    # Init server list
     s = {}
     for service_type in SERVICE_TYPES:
         by_service = s[TXTS[service_type]] = {}
         for af in VALID_AFS:
             by_af = by_service[TXTS["af"][af]] = {}
-            for proto in (UDP, TCP,):
+            for proto in (UDP, TCP):
                 by_proto = by_af[TXTS["proto"][proto]] = []
 
-
     for group_id in mem_db.groups:
-        meta_group = mem_db.groups[group_id]
-        if meta_group.table_type != SERVICES_TABLE_TYPE:
+        try:
+            meta_group = mem_db.groups[group_id]
+            if meta_group.table_type != SERVICES_TABLE_TYPE:
+                continue
+
+            scores = []
+            group = list_x_to_dict(meta_group.group)
+            for record in group:
+                try:
+                    status_obj = mem_db.statuses.get(record.get("status_id"))
+                    if not status_obj:
+                        continue
+                    status = getattr(status_obj, "dict", lambda: {})()
+
+                    for k in ("uptime", "max_uptime", "last_success"):
+                        record[k] = status.get(k, 0)
+
+                    record["score"] = compute_service_score(status)
+                    record["fqns"] = get_fqn_list(mem_db, record.get("ip"))
+                    scores.append(record["score"])
+                except Exception:
+                    # Skip invalid record but continue processing others
+                    continue
+
+            # Compute average score if any
+            if scores:
+                score_avg = sum(scores) / len(scores)
+                for record in group:
+                    record["score"] = score_avg
+
+            # Place group in server list
+            if group:
+                service_type = TXTS.get(group[0].get("type"), "unknown")
+                af = TXTS["af"].get(group[0].get("af"), "unknown")
+                proto = TXTS["proto"].get(group[0].get("proto"), "unknown")
+                s.setdefault(service_type, {}).setdefault(af, {}).setdefault(proto, []).append(group)
+
+        except Exception:
+            # Skip invalid group entirely
             continue
 
-        scores = []
-        group = list_x_to_dict(meta_group.group)
-        for record in group:
-            status = mem_db.statuses[record["status_id"]].dict()
-            for k in ("uptime", "max_uptime", "last_success",):
-                record[k] = status[k]
-
-            record["score"] = compute_service_score(status)
-            record["fqns"] = get_fqn_list(mem_db, record["ip"])
-            scores.append(record["score"])
-
-        if len(scores):
-            score_avg = sum(scores) / len(scores)
-            for record in group:
-                record["score"] = score_avg
-
-        service_type = TXTS[group[0]["type"]]
-        af = TXTS["af"][group[0]["af"]]
-        proto = TXTS["proto"][group[0]["proto"]]
-        s[service_type][af][proto].append(group)
-
+    # Sort each proto list by score
     for service_type in SERVICE_TYPES:
         for af in VALID_AFS:
-            for proto in (UDP, TCP,):
-                by_service = s[TXTS[service_type]]
-                by_af = by_service[TXTS["af"][af]]
-                by_proto = by_af[TXTS["proto"][proto]]
-                by_proto.sort(key=lambda x: x[0]["score"], reverse=True)
+            for proto in (UDP, TCP):
+                try:
+                    by_proto = s[TXTS[service_type]][TXTS["af"][af]][TXTS["proto"][proto]]
+                    by_proto.sort(key=lambda x: x[0].get("score", 0), reverse=True)
+                except Exception:
+                    continue
 
     s["timestamp"] = int(time.time())
     return s
@@ -172,10 +202,7 @@ def allocate_work(mem_db, need_afs, table_types, cur_time, mon_freq):
                     # Work is moved back to available but don't do it too soon.
                     # Statuses are bulk updated for entries in a group.
                     work_timestamp = wq.timestamps[group_id]
-                    elapsed = cur_time - work_timestamp
-                    if not work_timestamp or elapsed < 0:
-                        # Sanity check to avoid invalid results.
-                        continue
+                    elapsed = max(0, cur_time - work_timestamp)
 
                     # In time order with oldest first.
                     # So if this isn't old enough then none are.
@@ -200,12 +227,8 @@ def update_table_ip(mem_db, table_type: int, ip: str, alias_id: int, current_tim
         if record.table_type != table_type:
             continue
 
-        # SKip disabled records.
-        status = mem_db.statuses[record.status_id]
-        if status.status == STATUS_DISABLED:
-            continue
-
         # 1) If current IP is invalid set new IP.
+        status = mem_db.statuses[record.status_id]
         try:
             ensure_ip_is_public(record.ip)
         except:
@@ -224,8 +247,8 @@ def update_table_ip(mem_db, table_type: int, ip: str, alias_id: int, current_tim
         if not status.last_success and not status.last_uptime:
             if status.test_no >= 2:
                 cond_one = True
-        if status.last_success:
-            elapsed = current_time - status.last_uptime
+        if status.last_success and status.last_uptime:
+            elapsed = max(0, current_time - status.last_uptime)
             if elapsed > (MAX_SERVER_DOWNTIME * 2):
                 cond_two = True
 
