@@ -114,7 +114,8 @@ async def process_work(nic, curl, table_type=None, stagger=False):
     start_time = time.perf_counter()
     is_success, status_ids = await worker(nic, curl, table_type=table_type)
     if is_success == NO_WORK:
-        await asyncio.sleep(5 * 60)
+        # Between 1 - 5 mins.
+        await sleep_random(60000, 300000)
 
     # Update statuses.
     await async_wrap_errors(

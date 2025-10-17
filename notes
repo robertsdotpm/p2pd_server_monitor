@@ -94,6 +94,8 @@ edge case:
 
     - ntp ipv6 not working
     000001 for ipv6 not detected as private
+    localhost might pass too
+    
 
 SELECT *
 FROM imports
