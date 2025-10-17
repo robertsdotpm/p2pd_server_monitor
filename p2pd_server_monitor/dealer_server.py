@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from p2pd import *
 from typing import List
 from pprint import pformat
+import json
 from .dealer_utils import *
 from .db_init import *
 from .txt_strs import *
@@ -41,7 +42,13 @@ async def refresh_server_cache():
     while True:
         try:
             server_cache = build_server_list(mem_db)
-            server_list_str = pformat(server_cache, indent=4)
+            server_list_str = json.dumps(
+                server_cache,
+                indent=4,
+                sort_keys=True,
+                default=str
+            )
+            
             await save_all(mem_db)
         except:
             log_exception()
