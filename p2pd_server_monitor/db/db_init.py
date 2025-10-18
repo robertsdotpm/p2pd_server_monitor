@@ -1,7 +1,6 @@
-import aiosqlite
 from p2pd import *
-from .dealer_defs import *
-from .dealer_utils import *
+from ..defs import *
+from ..dealer.dealer_utils import *
 
 async def delete_all_data(sqlite_db):
     for table in ("settings", "services", "aliases", "status", "imports"):
@@ -14,7 +13,7 @@ async def init_settings_table(sqlite_db):
     await sqlite_db.execute(sql, params)
     await sqlite_db.commit()
 
-def insert_imports_test_data(mem_db, test_data=IMPORTS_TEST_DATA):
+def insert_imports_test_data(mem_db, test_data):
     for info in test_data:
         fqn = info[0]
         info = info[1:]
@@ -23,7 +22,7 @@ def insert_imports_test_data(mem_db, test_data=IMPORTS_TEST_DATA):
         # Set it up as work.
         mem_db.add_work(record["af"], IMPORTS_TABLE_TYPE, [record])
 
-def insert_services_test_data(mem_db, test_data=SERVICES_TEST_DATA):
+def insert_services_test_data(mem_db, test_data):
     for groups in test_data:
         records = []
 

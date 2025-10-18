@@ -1,10 +1,10 @@
 import asyncio
 import random
 from p2pd import *
-from .dealer_defs import *
+from ..defs import *
 from .worker_utils import *
 from .worker_monitors import *
-from .txt_strs import *
+from ..txt_strs import *
 
 """
 While I update the list of servers, loading WAN addresses is going to be broken.

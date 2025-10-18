@@ -3,7 +3,7 @@ from typing import Any, List, Union, Optional
 from pydantic import BaseModel, field_validator, model_validator
 from p2pd import *
 from fqdn import FQDN
-from .dealer_defs import *
+from ..defs import *
 
 class UniqueIndex:
     def __init__(self, key_fields):

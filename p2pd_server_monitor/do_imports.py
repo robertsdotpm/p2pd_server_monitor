@@ -1,7 +1,7 @@
 import os
 from p2pd import *
-from .dealer_utils import *
-from .db_init import *
+from .dealer.dealer_utils import *
+from .db.db_init import *
 
 service_lookup = {
     "stun": STUN_MAP_TYPE,
@@ -10,7 +10,8 @@ service_lookup = {
     "ntp": NTP_TYPE,
 }
 
-file_names = ("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/stun_v6.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/mqtt_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/mqtt_v6.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/turn_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/turn_v6.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/ntp_v4.csv", "/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/imports/ntp_v6.csv")
+import_root = "/home/debian/monitor/p2pd_server_monitor/imports"
+file_names = (f"{import_root}/stun_v4.csv", f"{import_root}/stun_v6.csv", f"{import_root}/mqtt_v4.csv", f"{import_root}/mqtt_v6.csv", f"{import_root}/turn_v4.csv", f"{import_root}/turn_v6.csv", f"{import_root}/ntp_v4.csv", f"{import_root}/ntp_v6.csv")
 
 def insert_from_lines(af, import_type, lines, db):
     import_list = []

@@ -1,8 +1,8 @@
 import time
 from typing import Any
 from collections import OrderedDict
-from .dealer_defs import *
-from .work_queue import *
+from ..defs import *
+from ..worker.work_queue import *
 from .mem_db_defs import *
 from p2pd import *
 

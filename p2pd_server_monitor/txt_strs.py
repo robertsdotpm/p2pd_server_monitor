@@ -1,5 +1,5 @@
 from p2pd import UDP, TCP, V4, V6
-from .dealer_defs import *
+from .defs import *
 
 
 TXTS = {

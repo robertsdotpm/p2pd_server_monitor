@@ -14,6 +14,40 @@ VALID_IMPORTS_TEST_DATA = [
     [None, TURN_TYPE, V4, "103.253.147.231", 3478, "quickblox", "baccb97ba2d92d71e26eb9886da5f1e0"],
 ]
 
+####################################################################################
+# groups .. group(s) ... fields inc list of fqns associated with it (maybe be blank)
+# type * af * proto * group_len = ...
+SERVICES_TEST_DATA = [
+    [
+        [
+            [],
+            STUN_CHANGE_TYPE, V4, UDP, "49.12.125.53", 3478
+        ],
+        [
+            [],
+            STUN_CHANGE_TYPE, V4, UDP, "49.12.125.53", 3479
+        ],
+        [
+            [],
+            STUN_CHANGE_TYPE, V4, UDP, "49.12.125.24", 3478
+        ],
+        [
+            [],
+            STUN_CHANGE_TYPE, V4, UDP, "49.12.125.24", 3479
+        ],
+    ],
+    
+    [
+        [[], NTP_TYPE, V4, UDP, "216.239.35.4", 123],
+    ]
+    
+]
+
+IMPORTS_TEST_DATA = [
+    [None, STUN_MAP_TYPE, V4, "49.12.125.53", 3478, None, None],
+]
+
+
 """
 While I update the list of servers, loading WAN addresses is going to be broken.
 So I'll manually set this for both speed and reliability.

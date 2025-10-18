@@ -1,6 +1,6 @@
 import asyncio
 from fastapi import Depends
-from .dealer_defs import *
+from ..defs import *
 from .dealer_utils import *
 
 @app.get("/list_groups")

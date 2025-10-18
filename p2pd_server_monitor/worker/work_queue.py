@@ -18,8 +18,8 @@ delete. This is a very neat trick used by high performance schedulers.
 
 from typing import Hashable, Any
 import time
-from .dealer_defs import *
-from .linked_list import *
+from ..defs import *
+from ..db.linked_list import *
 
 class WorkQueue:
     def __init__(self):

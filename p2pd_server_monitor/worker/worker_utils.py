@@ -1,6 +1,6 @@
 import httpx
 from p2pd import *
-from .dealer_defs import *
+from ..defs import *
 
 async def validate_stun_server(ip, port, pipe, mode, cip=None, cport=None):
     # New client used for the req.

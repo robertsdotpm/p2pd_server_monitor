@@ -7,12 +7,13 @@ from p2pd import *
 from typing import List
 from pprint import pformat
 import json
+from .dealer_defs import *
 from .dealer_utils import *
-from .db_init import *
-from .txt_strs import *
-from .mem_db_utils import *
-from .mem_db import *
-from .do_imports import *
+from ..db.db_init import *
+from ..txt_strs import *
+from ..db.mem_db_utils import *
+from ..db.mem_db import *
+from ..do_imports import *
 
 app = FastAPI(default_response_class=PrettyJSONResponse)
 mem_db = MemDB()
@@ -187,7 +188,9 @@ async def api_list_servers():
     return Response(content=server_list_str, media_type="application/json")
 
 if IS_DEBUG:
-    exec(open("/home/debian/monitor/p2pd_server_monitor/p2pd_server_monitor/dealer_test_apis.py").read(), globals())
+    cwd = get_script_parent()
+    test_apis_path = os.path.join(cwd, "dealer_test_apis.py")
+    exec(open(test_apis_path).read(), globals())
 
 if __name__ == "__main__":
     uvicorn.run(

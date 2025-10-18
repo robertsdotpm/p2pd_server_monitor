@@ -2,8 +2,8 @@ from dataclasses import asdict, fields, is_dataclass
 from collections import OrderedDict
 import aiosqlite
 import sqlite3
-from .dealer_defs import *
-from .work_queue import *
+from ..defs import *
+from ..worker.work_queue import *
 from .mem_db_defs import *
 from p2pd import *
 

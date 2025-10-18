@@ -4,9 +4,10 @@ import json
 from fastapi.responses import JSONResponse
 from fastapi import Request, HTTPException
 from p2pd import *
-from .db_init import *
-from .dealer_defs import *
-from .txt_strs import *
+from ..defs import *
+from ..txt_strs import *
+from ..db.db_init import *
+
 
 def localhost_only(request: Request):
     client_host = request.client.host

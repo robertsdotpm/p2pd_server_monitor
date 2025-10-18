@@ -1,6 +1,6 @@
 import asyncio
 from p2pd import *
-from .dealer_defs import *
+from ..defs import *
 from .worker_utils import *
 
 async def monitor_stun_map_type(nic, work):
